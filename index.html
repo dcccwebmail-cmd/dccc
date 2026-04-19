@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dhaka College Cultural Club - DCCC</title>
+    <link rel="icon" href="https://dhakacollegeculturalclub.com/logo.png" />
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="The official website for the Dhaka College Cultural Club (DCCC). Explore our events, departments, panels, and join a legacy of creativity and culture." />
+    <meta name="keywords" content="Dhaka College Cultural Club, DCCC, Dhaka College, dc Cultural Club, cultural club, student club, Bangladesh, events, music, art, theatre" />
+    <meta name="author" content="Dhaka College Cultural Club" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://dhakacollegeculturalclub.com/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dhakacollegeculturalclub.com/" />
+    <meta property="og:title" content="Dhaka College Cultural Club - DCCC" />
+    <meta property="og:description" content="Explore events, departments, and join a legacy of creativity and culture at DCCC." />
+    <meta property="og:image" content="https://dhakacollegeculturalclub.com/logo.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://dhakacollegeculturalclub.com/" />
+    <meta property="twitter:title" content="Dhaka College Cultural Club - DCCC" />
+    <meta property="twitter:description" content="Explore events, departments, and join a legacy of creativity and culture at DCCC." />
+    <meta property="twitter:image" content="https://dhakacollegeculturalclub.com/logo.png" />
+    
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-P8ZPZQMYDG"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-P8ZPZQMYDG');
+    </script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Quill editor -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    
+    <!-- jsPDF for ID Card Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'background': 'var(--background)',
+              'text-primary': 'var(--text-primary)',
+              'text-secondary': 'var(--text-secondary)',
+              'accent': 'var(--accent)',
+              'accent-hover': 'var(--accent-hover)',
+              'accent-text': 'var(--accent-text)',
+              'card-bg': 'var(--card-bg)',
+              'border-color': 'var(--border-color)',
+              
+              'dccc-blue': '#3B82F6',
+              'dccc-red': 'var(--dccc-red)',
+              'dccc-red-hover': 'var(--dccc-red-hover)',
+              'dccc-yellow': '#FBBF24',
+              'red-950': '#450a0a',
+            },
+            fontFamily: {
+              'poppins': ['Poppins', 'Hind Siliguri', 'sans-serif'],
+              'hind': ['Hind Siliguri', 'sans-serif'],
+            },
+            animation: {
+              'fade-in-up': 'fade-in-up 0.8s ease-out forwards',
+              'flip-in': 'flip-in 0.5s ease-out forwards',
+              'ken-burns': 'ken-burns 20s ease-out forwards',
+              'float': 'float 6s ease-in-out infinite',
+              'mandala-spin': 'mandala-spin linear infinite',
+              'mandala-pulse': 'mandala-pulse 4s ease-in-out infinite',
+              'pulse-red': 'pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'pulse-accent': 'pulse-accent 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'logo-pulse': 'logo-pulse 1.5s ease-in-out infinite',
+            },
+            keyframes: {
+              'fade-in-up': {
+                '0%': {
+                  opacity: '0',
+                  transform: 'translateY(20px)',
+                },
+                '100%': {
+                  opacity: '1',
+                  transform: 'translateY(0)',
+                },
+              },
+              'flip-in': {
+                '0%': { transform: 'rotateX(90deg)', opacity: '0' },
+                '100%': { transform: 'rotateX(0deg)', opacity: '1' },
+              },
+              'ken-burns': {
+                '0%': { transform: 'scale(1) translateY(0)', 'transform-origin': 'center center' },
+                '100%': { transform: 'scale(1.1) translateY(-10px)', 'transform-origin': 'center center' },
+              },
+              'float': {
+                '0%': { transform: 'translateY(0px)' },
+                '50%': { transform: 'translateY(-10px)' },
+                '100%': { transform: 'translateY(0px)' },
+              },
+              'mandala-spin': {
+                'from': { transform: 'rotate(0deg)' },
+                'to': { transform: 'rotate(360deg)' },
+              },
+              'mandala-pulse': {
+                '0%, 100%': { transform: 'scale(1)', opacity: '0.7' },
+                '50%': { transform: 'scale(1.05)', opacity: '1' },
+              },
+              'pulse-red': {
+                '0%': { boxShadow: '0 0 0 0 var(--dccc-red-pulse-start)' },
+                '70%': { boxShadow: '0 0 0 10px var(--dccc-red-pulse-end)' },
+                '100%': { boxShadow: '0 0 0 0 var(--dccc-red-pulse-end)' }
+              },
+              'pulse-accent': {
+                '0%': { boxShadow: '0 0 0 0 var(--accent-pulse-start)' },
+                '70%': { boxShadow: '0 0 0 10px var(--accent-pulse-end)' },
+                '100%': { boxShadow: '0 0 0 0 var(--accent-pulse-end)' }
+              },
+              'logo-pulse': {
+                '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+                '50%': { transform: 'scale(1.1)', opacity: '0.8' },
+              },
+            },
+            backgroundImage: {
+              'dot-pattern': "radial-gradient(circle at 1px 1px, var(--dot-pattern-color) 1px, transparent 0)",
+            },
+            backgroundSize: {
+                '20': '20px 20px',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --background: #f8fafc; /* slate-50 */
+        --text-primary: #0f172a; /* slate-900 */
+        --text-secondary: #475569; /* slate-600 */
+        --accent: #3b82f6; /* blue-500 */
+        --accent-hover: #2563eb; /* blue-600 */
+        --accent-text: #ffffff;
+        --card-bg: rgba(255, 255, 255, 0.6);
+        --border-color: rgba(0, 0, 0, 0.1);
+        --dot-pattern-color: rgba(0, 0, 0, 0.05);
+        --dccc-red: #EF4444; /* red-500 */
+        --dccc-red-hover: #DC2626; /* red-600 */
+        --dccc-red-pulse-start: rgba(239, 68, 68, 0.7);
+        --dccc-red-pulse-end: rgba(239, 68, 68, 0);
+        --accent-pulse-start: rgba(59, 130, 246, 0.7);
+        --accent-pulse-end: rgba(59, 130, 246, 0);
+        scroll-behavior: smooth;
+      }
+
+      html.dark {
+        --background: #0f172a; /* slate-900 */
+        --text-primary: #e2e8f0; /* slate-200 */
+        --text-secondary: #94a3b8; /* slate-400 */
+        --accent: #3b82f6; /* blue-500 */
+        --accent-hover: #60a5fa; /* blue-400 */
+        --accent-text: #ffffff;
+        --card-bg: rgba(30, 41, 59, 0.5); /* slate-800 with opacity */
+        --border-color: rgba(255, 255, 255, 0.1);
+        --dot-pattern-color: rgba(255, 255, 255, 0.08);
+        --dccc-red: #F87171; /* red-400 */
+        --dccc-red-hover: #EF4444; /* red-500 */
+        --dccc-red-pulse-start: rgba(248, 113, 113, 0.6);
+        --dccc-red-pulse-end: rgba(248, 113, 113, 0);
+        --accent-pulse-start: rgba(96, 165, 250, 0.6);
+        --accent-pulse-end: rgba(96, 165, 250, 0);
+      }
+
+      body {
+        background-color: var(--background);
+        color: var(--text-primary);
+        font-family: 'Poppins', 'Hind Siliguri', sans-serif;
+        background-image: radial-gradient(circle at 1px 1px, var(--dot-pattern-color) 1px, transparent 0);
+        background-size: 20px 20px;
+        transition: background-color 0.3s ease, color 0.3s ease;
+      }
+
+      /* Prose styles for rich text content */
+      .prose h1, .prose h2, .prose h3 { color: var(--text-primary); margin-bottom: 0.5em; margin-top: 1em; font-weight: 600; }
+      .prose h1 { font-size: 2em; }
+      .prose h2 { font-size: 1.5em; }
+      .prose h3 { font-size: 1.25em; }
+      .prose p, .prose ul, .prose ol { margin-bottom: 1em; }
+      .prose p, .prose li { color: var(--text-secondary); }
+      .prose strong, .prose b { color: var(--text-primary); font-weight: 700; }
+      .prose em, .prose i { font-style: italic; }
+      .prose a { color: var(--accent); text-decoration: underline; }
+      .prose blockquote { border-left: 4px solid var(--accent); color: var(--text-secondary); padding-left: 1em; margin-left: 0; font-style: italic; }
+      .prose ul { list-style-type: disc; padding-left: 1.5em; }
+      .prose ol { list-style-type: decimal; padding-left: 1.5em; }
+
+      /* Quill editor theme overrides - Rounded */
+      .ql-editor {
+        min-height: 150px;
+        font-family: 'Poppins', 'Hind Siliguri', sans-serif;
+        font-size: 1rem;
+        color: var(--text-primary);
+      }
+      .ql-toolbar {
+        border-top-left-radius: 1rem !important;
+        border-top-right-radius: 1rem !important;
+        border-color: var(--border-color) !important;
+        background-color: var(--card-bg);
+      }
+      .ql-container {
+        border-bottom-left-radius: 1rem !important;
+        border-bottom-right-radius: 1rem !important;
+        border-color: var(--border-color) !important;
+        color: var(--text-primary);
+        background-color: var(--background);
+      }
+      .ql-snow .ql-stroke { stroke: var(--text-secondary); }
+      .ql-snow .ql-fill { fill: var(--text-secondary); }
+      .ql-snow .ql-picker-label { color: var(--text-secondary); }
+      .ql-snow .ql-picker-options {
+        background-color: var(--card-bg);
+        border-color: var(--border-color) !important;
+        color: var(--text-primary);
+      }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.5",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "jspdf": "https://esm.sh/jspdf@^4.0.0"
+  }
+}
+</script>
+    <script>
+      (function () {
+        // Get the full path. Example: /<base>/about
+        const path = window.location.pathname;
+        
+        // A list of top-level routes in the React app.
+        const appRoutes = ['about', 'departments', 'events', 'panels', 'admin', 'join', 'join-admin'];
+
+        const pathSegments = path.split('/').filter(Boolean);
+        let firstRouteSegmentIndex = pathSegments.findIndex(segment => appRoutes.includes(segment));
+        
+        let basename = '/';
+        if (firstRouteSegmentIndex > 0) {
+            // If a route is found, but not at the root, the path before it is the basename.
+            // e.g. /base/about -> basename is /base
+            basename = '/' + pathSegments.slice(0, firstRouteSegmentIndex).join('/');
+        } else if (firstRouteSegmentIndex === -1 && pathSegments.length > 0) {
+            // If NO route segment is found, assume the whole path is the basename.
+            // e.g. /base/ -> basename is /base
+            // This handles initial load to the app's root in a sub-directory.
+            basename = '/' + pathSegments.join('/');
+        }
+        
+        window.APP_BASENAME = basename;
+      })();
+    </script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
