@@ -62,11 +62,18 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
             
             if (resFiles.ok) {
                 const data = await resFiles.json();
-                setAllFiles(data);
+                setAllFiles(data.filter((f: any) => {
+                    let fp = '/';
+                    if (f.filePath) {
+                        fp = f.filePath.substring(0, f.filePath.lastIndexOf('/'));
+                        if (fp === '') fp = '/';
+                    }
+                    return !fp.startsWith('/join_requests');
+                }));
             }
             if (resFolders.ok) {
                 const folderData = await resFolders.json();
-                setFolders(folderData);
+                setFolders(folderData.filter((f: string) => !f.startsWith('/join_requests')));
             }
         } catch (error) {
             console.error('Failed to fetch media data', error);
@@ -173,7 +180,11 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
 
     // Files exactly in current path
     const currentFiles = allFiles.filter(f => {
-        const folder = f.folder || '/';
+        let folder = '/';
+        if (f.filePath) {
+            folder = f.filePath.substring(0, f.filePath.lastIndexOf('/'));
+            if (folder === '') folder = '/';
+        }
         return folder === currentPath;
     });
 

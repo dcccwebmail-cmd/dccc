@@ -30,24 +30,7 @@ const sections = [
 ];
 const booths = ['Booth A', 'Booth B', 'Booth C', 'Booth D'];
 
-// Cloudinary Configuration
-const getEnv = (key: string) => {
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-        // @ts-ignore
-        return import.meta.env[key];
-    }
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
-        // @ts-ignore
-        return process.env[key];
-    }
-    return '';
-};
-
-const CLOUDINARY_CLOUD_NAME = getEnv('VITE_CLOUDINARY_CLOUD_NAME') || getEnv('REACT_APP_CLOUDINARY_CLOUD_NAME') || 'dccc_cloud'; 
-const CLOUDINARY_UPLOAD_PRESET = getEnv('VITE_CLOUDINARY_UPLOAD_PRESET') || getEnv('REACT_APP_CLOUDINARY_UPLOAD_PRESET') || 'dccc_uploads';
-const CLOUDINARY_API_KEY = '999432554534393';
+const IMAGEKIT_PUBLIC_KEY = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY || '';
 
 const compressImage = async (file: File): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -258,37 +241,35 @@ const JoinPage: React.FC = () => {
             let imageUrl = '';
             if (formData.imageFile) {
                 const compressedFile = await compressImage(formData.imageFile);
+                
+                // Get auth details from backend
+                const authRes = await fetch('/api/imagekit/auth');
+                if (!authRes.ok) throw new Error('Failed to get upload authorization.');
+                const authData = await authRes.json();
+
                 const uploadData = new FormData();
                 uploadData.append('file', compressedFile);
-                uploadData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); 
-                if (CLOUDINARY_API_KEY) {
-                    uploadData.append('api_key', CLOUDINARY_API_KEY);
-                }
                 const safeName = formData.name_en.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                const publicId = `${safeName}_${formData.roll}`;
-                uploadData.append('public_id', publicId);
+                const fileName = `${safeName}_${formData.roll || 'join'}.jpg`;
+                
+                uploadData.append('fileName', fileName);
+                uploadData.append('folder', '/join_requests');
+                uploadData.append('publicKey', IMAGEKIT_PUBLIC_KEY);
+                uploadData.append('signature', authData.signature);
+                uploadData.append('expire', authData.expire.toString());
+                uploadData.append('token', authData.token);
+                uploadData.append('useUniqueFileName', 'true');
 
-                const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+                const res = await fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
                     method: 'POST',
                     body: uploadData,
                 });
 
                 if (!res.ok) {
-                    // Fallback logic handled same as before...
-                    const retryRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-                        method: 'POST',
-                        body: (()=>{ 
-                            uploadData.delete('public_id'); 
-                            return uploadData; 
-                        })(),
-                    });
-                    if (!retryRes.ok) throw new Error('Image upload failed.');
-                    const retryJson = await retryRes.json();
-                    imageUrl = retryJson.secure_url;
-                } else {
-                    const json = await res.json();
-                    imageUrl = json.secure_url;
+                    throw new Error('Image upload failed.');
                 }
+                const json = await res.json();
+                imageUrl = json.url;
             }
 
             const servicePayload = {
