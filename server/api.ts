@@ -1,11 +1,26 @@
 import express from 'express';
 import cors from 'cors';
 import ImageKit from 'imagekit';
+import admin from 'firebase-admin';
 
 const apiApp = express.Router();
 
 apiApp.use(cors());
 apiApp.use(express.json());
+
+// Initialize Firebase Admin SDK
+let adminDb: any = null;
+try {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      projectId: process.env.FIREBASE_PROJECT_ID || 'dccc-v3'
+    });
+  }
+  adminDb = admin.firestore();
+  console.log("Firebase Admin initialized successfully.");
+} catch (err) {
+  console.error("Firebase Admin initialization failed:", err);
+}
 
 // ImageKit initialization
 let imagekit: ImageKit | null = null;
@@ -117,6 +132,112 @@ apiApp.delete('/imagekit/files/:fileId', async (req, res) => {
     await ik.deleteFile(fileId);
     res.json({ success: true });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Secure Proxy for Resend Email Sending
+apiApp.post('/email/send', async (req, res) => {
+  try {
+    const { to, subject, html, attachments, resendApiKey } = req.body;
+    
+    const apiKey = process.env.RESEND_API_KEY || resendApiKey;
+    if (!apiKey) {
+      return res.status(400).json({ error: "Resend API Key is missing. Please configure RESEND_API_KEY on the server or provide it in settings." });
+    }
+
+    const fromHeader = req.body.from;
+    if (!fromHeader) {
+      return res.status(400).json({ error: "Sender details are missing." });
+    }
+
+    const payload = {
+      from: fromHeader,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html,
+      attachments
+    };
+
+    console.log(`Sending secure email via Resend to ${JSON.stringify(to)} with subject "${subject}"...`);
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const resData: any = await response.json();
+    if (!response.ok) {
+      throw new Error(resData?.message || `Resend Error: ${response.statusText}`);
+    }
+
+    res.json(resData);
+  } catch (error: any) {
+    console.error("Error in secure /email/send proxy:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resend Webhook endpoint for tracking email status
+apiApp.post('/webhooks/resend', async (req, res) => {
+  try {
+    const event = req.body;
+    console.log("Received Resend Webhook:", JSON.stringify(event));
+
+    // Resend sends webhook details containing 'type' and 'data'
+    const eventType = event?.type;
+    const emailId = event?.data?.email_id;
+
+    if (!eventType || !emailId) {
+      return res.status(400).json({ error: "Invalid Resend webhook payload structure." });
+    }
+
+    if (!adminDb) {
+      return res.status(500).json({ error: "Firestore Admin Database is not initialized." });
+    }
+
+    // Map Resend events to our JoinRequest emailStatus types
+    const mapResendStatus = (type: string): 'sending' | 'sent' | 'delivered' | 'bounced' | 'opened' | 'failed' | null => {
+      switch (type) {
+        case 'email.sent': return 'sent';
+        case 'email.delivered': return 'delivered';
+        case 'email.bounced': return 'bounced';
+        case 'email.opened': return 'opened';
+        case 'email.clicked': return 'opened';
+        case 'email.complained': return 'failed';
+        case 'email.delivery_delayed': return 'sending';
+        default: return null;
+      }
+    };
+
+    const targetStatus = mapResendStatus(eventType);
+    if (!targetStatus) {
+      console.log(`Ignoring Resend event type: ${eventType}`);
+      return res.json({ received: true, ignored: true });
+    }
+
+    // Query join_requests collection in Firestore to find request with matching emailId
+    const snapshot = await adminDb.collection('join_requests').where('emailId', '==', emailId).get();
+    
+    if (snapshot.empty) {
+      console.warn(`No JoinRequest document found matching emailId: ${emailId}`);
+      return res.json({ success: false, reason: "No matching document found in Firestore." });
+    }
+
+    const batch = adminDb.batch();
+    snapshot.docs.forEach((doc: any) => {
+      console.log(`Updating document ${doc.id} with email status: ${targetStatus}`);
+      batch.update(doc.ref, { emailStatus: targetStatus });
+    });
+    await batch.commit();
+
+    res.json({ success: true, updatedCount: snapshot.size });
+  } catch (error: any) {
+    console.error("Error in /webhooks/resend listener:", error);
     res.status(500).json({ error: error.message });
   }
 });

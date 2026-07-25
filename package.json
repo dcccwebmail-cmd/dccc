@@ -12,6 +12,7 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "firebase-admin": "^14.2.0",
     "imagekit": "^6.0.0",
     "imagekitio-react": "^4.3.0",
     "jspdf": "^4.0.0",

@@ -1,7 +1,7 @@
 
 import { db } from './firebase';
-import { EmailConfig, BrevoConfig, IdCardConfig, JoinRequest } from '../types';
-import { sendBrevoEmail } from './emailService';
+import { EmailConfig, ResendConfig, IdCardConfig, JoinRequest } from '../types';
+import { sendResendEmail } from './emailService';
 
 // Updated Script URL
 const GOOGLE_SHEET_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxrbMNLvHAR5sFgqXt00qcJy2HxKm0H4JRKIMdzdMyF8naOzpWfgZz986ocMXB5wQkShA/exec"; 
@@ -97,7 +97,7 @@ interface UpdateStatusOptions {
     status: 'pending' | 'approved' | 'rejected';
     userData?: JoinRequest;
     emailConfig?: EmailConfig;
-    brevoConfig?: BrevoConfig;
+    resendConfig?: ResendConfig;
     idCardConfig?: IdCardConfig;
     sessionYear?: string; // Configured year from admin
 }
@@ -107,7 +107,7 @@ export const updateJoinRequestStatus = async ({
     status,
     userData,
     emailConfig,
-    brevoConfig,
+    resendConfig,
     idCardConfig,
     sessionYear
 }: UpdateStatusOptions) => {
@@ -149,20 +149,34 @@ export const updateJoinRequestStatus = async ({
 
   await db.collection(COLLECTION).doc(id).update(updatePayload);
 
-  // 3. Send Email via Brevo (Client-side) if Approved
-  if (status === 'approved' && userData && brevoConfig?.apiKey) {
+  // 3. Send Email via Resend if Approved
+  if (status === 'approved' && userData) {
       try {
-          await sendBrevoEmail({
-              brevoConfig,
+          const emailResponse = await sendResendEmail({
+              resendConfig,
               to: { name: userData.personal.name_en, email: userData.personal.email },
               subject: emailConfig?.subject || "Welcome to DCCC",
               htmlContent: emailConfig?.body || "Your membership is approved.",
               userData: { ...userData, assignedId }, // Pass the newly assigned ID
               idCardConfig
           });
-          console.log("Brevo email sent successfully.");
+          console.log("Resend email sent successfully, ID:", emailResponse?.id);
+          
+          if (emailResponse?.id) {
+              await db.collection(COLLECTION).doc(id).update({
+                  emailId: emailResponse.id,
+                  emailStatus: 'sent'
+              });
+          }
       } catch (emailError) {
-          console.error("Failed to send Brevo email:", emailError);
+          console.error("Failed to send Resend email:", emailError);
+          try {
+              await db.collection(COLLECTION).doc(id).update({
+                  emailStatus: 'failed'
+              });
+          } catch (dbErr) {
+              console.error("Failed to update email status to failed in database:", dbErr);
+          }
           // Don't throw here to avoid rolling back the approval state in UI logic, but log it loudly.
           // In a production backend, this would be a separate queue.
           alert(`Status updated to Approved, but Email failed to send: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`);

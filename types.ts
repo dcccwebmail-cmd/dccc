@@ -133,6 +133,13 @@ export interface BrevoConfig {
     senderEmail: string;
 }
 
+// Resend Configuration
+export interface ResendConfig {
+    apiKey: string;
+    senderName: string;
+    senderEmail: string;
+}
+
 // Coordinate configuration for a field on the ID card
 export interface IdCardField {
     x: number;
@@ -172,6 +179,7 @@ export interface JoinContent {
   supportFacebook?: string;
   emailConfig?: EmailConfig;
   brevoConfig?: BrevoConfig;
+  resendConfig?: ResendConfig;
   idCardConfig?: IdCardConfig;
   currentSessionYear?: string; // e.g. "25" for 2025-2026 session
 }
@@ -255,5 +263,7 @@ export interface JoinRequest {
   };
   status: 'pending' | 'approved' | 'rejected';
   assignedId?: string; // Field to store the final approved ID
+  emailId?: string; // Resend email ID
+  emailStatus?: 'sending' | 'sent' | 'delivered' | 'bounced' | 'opened' | 'failed'; // Email delivery tracking status
   submitted_at: string;
 }

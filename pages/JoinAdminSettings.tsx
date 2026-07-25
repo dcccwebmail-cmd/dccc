@@ -453,7 +453,7 @@ const JoinAdminSettings: React.FC = () => {
                                 onClick={() => setSettingsTab('email')} 
                                 className={`w-full text-left px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${settingsTab === 'email' ? 'bg-accent text-accent-text font-extrabold shadow-md' : 'text-text-secondary hover:bg-black/5 dark:hover:bg-white/5'}`}
                             >
-                                Email System (Brevo)
+                                Email System (Resend)
                             </button>
                         </li>
                         <li>
@@ -540,13 +540,13 @@ const JoinAdminSettings: React.FC = () => {
                         <div className="p-6 md:p-8 overflow-y-auto h-full">
                             <form onSubmit={handleContentSubmit} className="space-y-6 max-w-3xl">
                                 <div>
-                                    <h2 className="text-xl font-extrabold text-accent">Email System Configuration (Brevo)</h2>
-                                    <p className="text-xs text-text-secondary mt-1">Provide SMTP sender keys to send automatic member welcome emails with attached ID Cards.</p>
+                                    <h2 className="text-xl font-extrabold text-accent">Email System Configuration (Resend)</h2>
+                                    <p className="text-xs text-text-secondary mt-1">Provide Resend API key and sender details to send automatic member welcome emails with attached ID Cards.</p>
                                 </div>
-                                <FormInput label="Brevo API Key" name="apiKey" value={joinContent.brevoConfig?.apiKey || ''} onChange={(e) => updateJoinContent({ brevoConfig: { ...joinContent.brevoConfig, apiKey: e.target.value } as any })} type="password" />
+                                <FormInput label="Resend API Key" name="apiKey" value={joinContent.resendConfig?.apiKey || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, apiKey: e.target.value } as any })} type="password" />
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <FormInput label="Sender Name" name="senderName" value={joinContent.brevoConfig?.senderName || ''} onChange={(e) => updateJoinContent({ brevoConfig: { ...joinContent.brevoConfig, senderName: e.target.value } as any })} />
-                                    <FormInput label="Sender Email" name="senderEmail" value={joinContent.brevoConfig?.senderEmail || ''} onChange={(e) => updateJoinContent({ brevoConfig: { ...joinContent.brevoConfig, senderEmail: e.target.value } as any })} />
+                                    <FormInput label="Sender Name" name="senderName" value={joinContent.resendConfig?.senderName || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, senderName: e.target.value } as any })} />
+                                    <FormInput label="Sender Email" name="senderEmail" value={joinContent.resendConfig?.senderEmail || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, senderEmail: e.target.value } as any })} />
                                 </div>
                                 <div className="border-t border-border-color pt-6 mt-6">
                                     <h3 className="font-extrabold text-sm uppercase tracking-wider mb-4">Email Template</h3>

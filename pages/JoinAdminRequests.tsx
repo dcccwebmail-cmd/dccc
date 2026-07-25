@@ -4,7 +4,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useData } from '../contexts/DataContext';
 import { generateIdCardPdf } from '../services/emailService';
 import { JoinRequest } from '../types';
-import { FileText, RefreshCw, CheckCircle, Clock, Search, Trash2 } from 'lucide-react';
+import { FileText, RefreshCw, CheckCircle, Clock, Search, Trash2, Download } from 'lucide-react';
 
 const JoinAdminRequests: React.FC = () => {
     const [requests, setRequests] = useState<JoinRequest[]>([]);
@@ -44,7 +44,7 @@ const JoinAdminRequests: React.FC = () => {
                 status, 
                 userData: reqData, 
                 emailConfig: joinContent?.emailConfig,
-                brevoConfig: joinContent?.brevoConfig,
+                resendConfig: joinContent?.resendConfig,
                 idCardConfig: joinContent?.idCardConfig,
                 sessionYear: joinContent?.currentSessionYear
             });
@@ -112,6 +112,112 @@ const JoinAdminRequests: React.FC = () => {
         return matchesTab && matchesSearch;
     });
 
+    const handleExportCSV = () => {
+        if (filteredRequests.length === 0) {
+            showToast("No records available to export with current filters", "error");
+            return;
+        }
+
+        try {
+            const escapeCSV = (val: any) => {
+                if (val === null || val === undefined) return '';
+                let str = String(val).trim();
+                str = str.replace(/[\r\n]+/g, ' ');
+                if (str.includes(',') || str.includes('"') || str.includes(';')) {
+                    str = `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            };
+
+            const headers = [
+                "DCCC ID",
+                "Name (EN)",
+                "Name (BN)",
+                "Email",
+                "Phone",
+                "WhatsApp",
+                "DOB",
+                "Gender",
+                "Father's Name",
+                "Mother's Name",
+                "Present Address",
+                "Permanent Address",
+                "Class Roll",
+                "Section/Group",
+                "Prev Institute",
+                "Blood Group",
+                "First Choice Dept",
+                "Second Choice Dept",
+                "Reason for Joining",
+                "Experience",
+                "Hobbies",
+                "Skills",
+                "Facebook",
+                "LinkedIn",
+                "Instagram",
+                "Reg Type",
+                "Payment Method",
+                "Trx ID / Form ID",
+                "Submitted At",
+                "Status"
+            ];
+
+            const rows = filteredRequests.map(r => [
+                r.assignedId || '',
+                r.personal?.name_en || '',
+                r.personal?.name_bn || '',
+                r.personal?.email || '',
+                r.contact?.phone || '',
+                r.contact?.whatsapp || '',
+                r.personal?.dob || '',
+                r.personal?.gender || '',
+                r.personal?.father_name || '',
+                r.personal?.mother_name || '',
+                r.contact?.present_address || '',
+                r.contact?.permanent_address || '',
+                r.academic?.roll || '',
+                r.academic?.section || '',
+                r.academic?.prev_institute || '',
+                r.academic?.blood_group || '',
+                r.preferences?.first_choice || '',
+                r.preferences?.second_choice || '',
+                r.preferences?.reason || '',
+                r.skills?.experience || '',
+                r.skills?.hobbies || '',
+                r.skills?.skills || '',
+                r.socials?.facebook || '',
+                r.socials?.linkedin || '',
+                r.socials?.instagram || '',
+                r.meta?.reg_type === 'offline' ? 'Offline' : 'Online',
+                r.meta?.reg_type === 'offline' ? 'Offline Cash' : (r.payment?.method ? getPaymentMethodName(r.payment.method) : ''),
+                r.meta?.reg_type === 'offline' ? (r.payment?.dccc_id || '') : (r.payment?.trx_id || ''),
+                r.submitted_at ? new Date(r.submitted_at).toLocaleString() : '',
+                r.status
+            ]);
+
+            const csvContent = [
+                headers.map(escapeCSV).join(','),
+                ...rows.map(row => row.map(escapeCSV).join(','))
+            ].join('\n');
+
+            const filename = `dccc_members_${filter}_${new Date().toISOString().split('T')[0]}.csv`;
+            const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showToast(`Exported ${filteredRequests.length} records successfully!`, 'success');
+        } catch (error) {
+            console.error("CSV Export failed:", error);
+            showToast("Failed to export CSV file", "error");
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -127,8 +233,8 @@ const JoinAdminRequests: React.FC = () => {
                     ))}
                 </div>
 
-                <div className="flex items-center gap-3 w-full sm:w-80">
-                    <div className="relative w-full">
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-60">
                         <input 
                             type="text" 
                             placeholder="Search requests..." 
@@ -138,13 +244,23 @@ const JoinAdminRequests: React.FC = () => {
                         />
                         <Search className="w-4 h-4 text-text-secondary absolute left-3 top-2.5" />
                     </div>
-                    <button 
-                        onClick={fetchRequests} 
-                        className="p-2 bg-card-bg border border-border-color rounded-xl hover:bg-accent/10 transition-colors text-text-secondary"
-                        title="Reload requests"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${loadingRequests ? 'animate-spin' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={fetchRequests} 
+                            className="p-2.5 bg-card-bg border border-border-color rounded-xl hover:bg-accent/10 transition-colors text-text-secondary"
+                            title="Reload requests"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${loadingRequests ? 'animate-spin' : ''}`} />
+                        </button>
+                        <button
+                            onClick={handleExportCSV}
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-accent hover:bg-accent-hover text-accent-text font-bold rounded-xl text-sm transition-all shadow-md whitespace-nowrap"
+                            title="Export current list to CSV"
+                        >
+                            <Download className="w-4 h-4" />
+                            <span>Export CSV</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -252,13 +368,26 @@ const JoinAdminRequests: React.FC = () => {
                                 <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-text-primary leading-tight">{selectedRequest.personal.name_en}</h2>
                                 <p className="text-text-secondary text-sm font-hind">{selectedRequest.personal.name_bn}</p>
                             </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                                selectedRequest.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 
-                                selectedRequest.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 
-                                'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-                            }`}>
-                                {selectedRequest.status}
-                            </span>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                                    selectedRequest.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 
+                                    selectedRequest.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 
+                                    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                                }`}>
+                                    {selectedRequest.status}
+                                </span>
+                                {selectedRequest.status === 'approved' && selectedRequest.emailStatus && (
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1 ${
+                                        ['sent', 'delivered'].includes(selectedRequest.emailStatus) ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' :
+                                        selectedRequest.emailStatus === 'opened' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400' :
+                                        selectedRequest.emailStatus === 'sending' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                                        'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                                    }`}>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                        {selectedRequest.emailStatus}
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         {/* Image */}

@@ -1,8 +1,8 @@
 import { jsPDF } from "jspdf";
-import { BrevoConfig, IdCardConfig, JoinRequest } from "../types";
+import { ResendConfig, IdCardConfig, JoinRequest } from "../types";
 
 interface SendEmailParams {
-    brevoConfig: BrevoConfig;
+    resendConfig: ResendConfig;
     to: { name: string; email: string };
     subject: string;
     htmlContent: string;
@@ -134,18 +134,18 @@ export const generateIdCardPdf = async (userData: JoinRequest, config: IdCardCon
     return dataUri.split(',')[1];
 };
 
-export const sendBrevoEmail = async ({ brevoConfig, to, subject, htmlContent, userData, idCardConfig }: SendEmailParams) => {
-    const url = "https://api.brevo.com/v3/smtp/email";
+export const sendResendEmail = async ({ resendConfig, to, subject, htmlContent, userData, idCardConfig }: SendEmailParams) => {
+    const url = "/api/email/send";
     
-    let attachment = null;
+    let attachments = undefined;
 
     if (idCardConfig) {
         try {
             const pdfBase64 = await generateIdCardPdf(userData, idCardConfig);
-            attachment = [
+            attachments = [
                 {
                     content: pdfBase64,
-                    name: `DCCC_ID_${userData.personal.name_en.replace(/\s/g, '_')}.pdf`
+                    filename: `DCCC_ID_${userData.personal.name_en.replace(/\s/g, '_')}.pdf`
                 }
             ];
         } catch (e) {
@@ -162,39 +162,34 @@ export const sendBrevoEmail = async ({ brevoConfig, to, subject, htmlContent, us
         .replace(/{{\s*section\s*}}/gi, userData.academic.section || '')
         .replace(/{{\s*phone\s*}}/gi, userData.contact.phone || '');
 
+    const fromHeader = resendConfig?.senderName 
+        ? `${resendConfig.senderName} <${resendConfig.senderEmail}>`
+        : resendConfig?.senderEmail;
+
     const payload = {
-        sender: {
-            name: brevoConfig.senderName,
-            email: brevoConfig.senderEmail
-        },
-        to: [
-            {
-                email: to.email,
-                name: to.name
-            }
-        ],
+        from: fromHeader,
+        to: [to.email],
         subject: subject,
-        htmlContent: `<html><body>${finalBody}</body></html>`,
-        attachment: attachment
+        html: `<html><body>${finalBody}</body></html>`,
+        attachments: attachments,
+        resendApiKey: resendConfig?.apiKey // Send as backup if RESEND_API_KEY env is not configured
     };
 
     const response = await fetch(url, {
         method: "POST",
         headers: {
-            "accept": "application/json",
-            "api-key": brevoConfig.apiKey,
-            "content-type": "application/json"
+            "Content-Type": "application/json"
         },
         body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
-        let errorMessage = "Brevo API Error";
+        let errorMessage = "Resend API Error";
         try {
             const err = await response.json();
-            errorMessage = err.message || errorMessage;
+            errorMessage = err.error || err.message || errorMessage;
         } catch (jsonError) {
-            errorMessage = `Brevo API Error: ${response.status} ${response.statusText}`;
+            errorMessage = `Resend API Error: ${response.status} ${response.statusText}`;
         }
         throw new Error(errorMessage);
     }
