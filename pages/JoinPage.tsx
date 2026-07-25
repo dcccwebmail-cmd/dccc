@@ -32,8 +32,6 @@ const sections = [
 ];
 const booths = ['Booth A', 'Booth B', 'Booth C', 'Booth D'];
 
-const IMAGEKIT_PUBLIC_KEY = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY || '';
-
 const JoinPage: React.FC = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
@@ -44,6 +42,8 @@ const JoinPage: React.FC = () => {
     
     const [regType, setRegType] = useState<'new' | 'offline' | null>(null);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+    const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+    const formTopRef = useRef<HTMLDivElement>(null);
 
     const [formData, setFormData] = useState({
         name_bn: '',
@@ -158,10 +158,18 @@ const JoinPage: React.FC = () => {
         }
     };
 
+    const scrollToFormTop = () => {
+        if (formTopRef.current) {
+            formTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            window.scrollTo(0, 0);
+        }
+    };
+
     const handleNext = () => {
         if (validateStep(currentStep)) {
             setCurrentStep(prev => Math.min(prev + 1, 6));
-            window.scrollTo(0, 0);
+            scrollToFormTop();
         } else {
             if (currentStep === 3 && formData.roll && !/^\d{13}$/.test(formData.roll)) {
                 showToast('Roll number must be exactly 13 digits.', 'error');
@@ -174,7 +182,7 @@ const JoinPage: React.FC = () => {
 
     const handleBack = () => {
         setCurrentStep(prev => Math.max(prev - 1, 1));
-        window.scrollTo(0, 0);
+        scrollToFormTop();
     };
 
     const handleCopyNumber = (number: string) => {
@@ -235,7 +243,10 @@ const JoinPage: React.FC = () => {
                 
                 // Get auth details from backend
                 const authRes = await fetch('/api/imagekit/auth');
-                if (!authRes.ok) throw new Error('Failed to get upload authorization.');
+                if (!authRes.ok) {
+                    const errData = await authRes.json().catch(() => ({}));
+                    throw new Error(errData.error || 'Failed to get upload authorization.');
+                }
                 const authData = await authRes.json();
 
                 const uploadData = new FormData();
@@ -245,7 +256,7 @@ const JoinPage: React.FC = () => {
                 
                 uploadData.append('fileName', fileName);
                 uploadData.append('folder', '/join_requests');
-                uploadData.append('publicKey', IMAGEKIT_PUBLIC_KEY);
+                uploadData.append('publicKey', authData.publicKey || '');
                 uploadData.append('signature', authData.signature);
                 uploadData.append('expire', authData.expire.toString());
                 uploadData.append('token', authData.token);
@@ -411,19 +422,19 @@ const JoinPage: React.FC = () => {
     };
 
     const renderStepper = () => (
-        <div className="flex flex-wrap justify-center items-start gap-2 md:gap-4 mb-10 px-2">
-            {steps.map((step) => {
+        <div className="flex items-center justify-center mb-10 px-4 max-w-2xl mx-auto w-full">
+            {steps.map((step, index) => {
                 const isActive = currentStep === step.id;
                 const isCompleted = currentStep > step.id;
                 return (
-                    <div key={step.id} className={`flex flex-col items-center ${step.id === 6 ? 'w-24 md:w-32' : 'w-16 md:w-28'}`}>
-                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-bold text-sm md:text-base transition-all duration-300 border-2 ${isActive || isCompleted ? 'bg-accent border-accent text-accent-text' : 'bg-card-bg border-border-color text-text-secondary'}`}>
+                    <React.Fragment key={step.id}>
+                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex shrink-0 items-center justify-center font-bold text-sm md:text-base transition-all duration-300 ${isCompleted ? 'bg-accent text-accent-text' : isActive ? 'border-2 border-accent text-accent bg-accent/10' : 'border-2 border-border-color text-text-secondary bg-card-bg'}`}>
                             {step.id}
                         </div>
-                        <span className={`text-[10px] md:text-xs text-center mt-2 font-medium leading-tight whitespace-pre-wrap font-hind ${isActive ? 'text-accent' : 'text-text-secondary'}`}>
-                            {step.label}
-                        </span>
-                    </div>
+                        {index < steps.length - 1 && (
+                            <div className={`flex-1 h-1 mx-1 md:mx-2 transition-all duration-300 ${isCompleted ? 'bg-accent' : 'bg-border-color'}`}></div>
+                        )}
+                    </React.Fragment>
                 );
             })}
         </div>
@@ -465,15 +476,33 @@ const JoinPage: React.FC = () => {
                         <h1 className="text-3xl md:text-5xl font-extrabold text-accent drop-shadow-sm font-poppins">Join Dhaka College Cultural Club</h1>
                     </div>
                     {renderStepper()}
-                    <div className="bg-white dark:bg-slate-800 border border-border-color shadow-2xl rounded-b-3xl overflow-hidden rounded-t-3xl">
+                    <div ref={formTopRef} className="bg-white dark:bg-slate-800 border border-border-color shadow-2xl rounded-b-3xl overflow-hidden rounded-t-3xl scroll-mt-24">
                         <div className="bg-accent p-4 md:p-5">
-                            <h2 className="text-xl md:text-2xl font-bold text-accent-text text-center md:text-left whitespace-pre-line">{steps[currentStep - 1].label.replace('\n', ' ')}</h2>
+                            <h2 className="text-xl md:text-2xl font-bold text-accent-text text-center md:text-left">
+                                <span className="block">{steps[currentStep - 1].label.split('\n')[0]}</span>
+                                {steps[currentStep - 1].label.split('\n')[1] && (
+                                    <span className="block text-sm md:text-base font-normal mt-1 opacity-90 font-poppins">
+                                        {steps[currentStep - 1].label.split('\n')[1]}
+                                    </span>
+                                )}
+                            </h2>
                         </div>
                         <div className="p-6 md:p-10">
                             {currentStep === 1 && (
                                 <div className="space-y-6 animate-fade-in-up">
-                                    <div className="bg-card-bg p-6 rounded-2xl border border-border-color text-text-secondary text-sm md:text-base leading-relaxed space-y-4">
-                                        <div className="prose dark:prose-invert max-w-none font-hind" dangerouslySetInnerHTML={{ __html: data?.join?.description || '' }} />
+                                    <div className="bg-card-bg rounded-2xl border border-border-color overflow-hidden">
+                                        <button 
+                                            onClick={() => setIsDescriptionOpen(!isDescriptionOpen)}
+                                            className="w-full flex items-center justify-between p-4 md:p-6 text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                                        >
+                                            <span className="font-bold text-accent md:text-lg">ডিসিএসসি কী এবং কেন যুক্ত হবেন? (What is DCCC & Why Join?)</span>
+                                            <svg className={`w-6 h-6 transform transition-transform duration-300 text-text-secondary ${isDescriptionOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                        </button>
+                                        <div className={`transition-all duration-500 ease-in-out ${isDescriptionOpen ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'} overflow-hidden`}>
+                                            <div className="p-4 md:p-6 pt-0 text-text-secondary text-sm md:text-base leading-relaxed space-y-4">
+                                                <div className="prose dark:prose-invert max-w-none font-hind" dangerouslySetInnerHTML={{ __html: data?.join?.description || '' }} />
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="flex flex-col md:flex-row gap-4 justify-center my-8">
                                         <button onClick={() => setRegType('offline')} className={`px-6 py-4 rounded-2xl border-2 font-bold flex flex-col items-center gap-2 ${regType === 'offline' ? 'border-accent bg-accent/10 text-accent' : 'border-border-color text-text-secondary'}`}><span className="text-xl">📝</span>অফলাইন ফর্ম সংগ্রহ করেছি<span className="text-xs font-normal opacity-70 font-poppins">(Already took form)</span></button>
@@ -567,11 +596,11 @@ const JoinPage: React.FC = () => {
                                 </div>
                             )}
                         </div>
-                        <div className="bg-gray-50/50 dark:bg-black/20 px-6 py-4 flex justify-between items-center border-t border-border-color backdrop-blur-sm">
-                             <div className="text-text-secondary text-sm font-medium font-poppins">{currentStep}/6</div>
-                            <div className="flex gap-4">
-                                <button onClick={handleBack} disabled={currentStep === 1 || isSubmitting} className={`px-6 py-2 rounded-full font-semibold transition-all ${currentStep === 1 ? 'opacity-0 cursor-default' : 'bg-card-bg border border-border-color text-text-primary'}`}>পূর্ববর্তী (Back)</button>
-                                {currentStep < 6 ? <button onClick={handleNext} disabled={currentStep === 1 && !regType} className="px-6 py-2 bg-accent text-accent-text font-bold rounded-full hover:bg-accent-hover shadow-md disabled:opacity-50">পরবর্তী (Next) &rarr;</button> : <button onClick={handleSubmit} disabled={isSubmitting} className="px-6 py-2 bg-green-600 text-white font-bold rounded-full hover:bg-green-700 shadow-md disabled:bg-slate-400">{isSubmitting ? 'Uploading & Submitting...' : 'জমা দিন (Submit)'}</button>}
+                        <div className="bg-gray-50/50 dark:bg-black/20 px-4 md:px-6 py-4 flex flex-row justify-between items-center border-t border-border-color backdrop-blur-sm gap-2">
+                             <div className="text-text-secondary text-xs md:text-sm font-medium font-poppins shrink-0 hidden sm:block">Step {currentStep} of 6</div>
+                            <div className="flex flex-row items-center justify-end gap-2 w-full sm:w-auto">
+                                <button onClick={handleBack} disabled={currentStep === 1 || isSubmitting} className={`px-4 md:px-6 py-2 rounded-full font-semibold transition-all whitespace-nowrap text-sm md:text-base ${currentStep === 1 ? 'opacity-0 cursor-default hidden sm:block' : 'bg-card-bg border border-border-color text-text-primary'}`}>পূর্ববর্তী (Back)</button>
+                                {currentStep < 6 ? <button onClick={handleNext} disabled={currentStep === 1 && !regType} className="px-4 md:px-6 py-2 bg-accent text-accent-text font-bold rounded-full hover:bg-accent-hover shadow-md disabled:opacity-50 whitespace-nowrap text-sm md:text-base">পরবর্তী (Next) &rarr;</button> : <button onClick={handleSubmit} disabled={isSubmitting} className="px-4 md:px-6 py-2 bg-green-600 text-white font-bold rounded-full hover:bg-green-700 shadow-md disabled:bg-slate-400 whitespace-nowrap text-sm md:text-base">{isSubmitting ? 'Submitting...' : 'জমা দিন (Submit)'}</button>}
                             </div>
                         </div>
                     </div>

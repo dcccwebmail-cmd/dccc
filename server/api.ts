@@ -26,24 +26,40 @@ try {
 let imagekit: ImageKit | null = null;
 const getIkClient = () => {
   if (!imagekit) {
-    if (!process.env.VITE_IMAGEKIT_URL_ENDPOINT || !process.env.VITE_IMAGEKIT_PUBLIC_KEY || !process.env.IMAGEKIT_PRIVATE_KEY) {
+    const urlEndpoint = process.env.VITE_IMAGEKIT_URL_ENDPOINT;
+    const publicKey = process.env.VITE_IMAGEKIT_PUBLIC_KEY;
+    const privateKey = process.env.IMAGEKIT_PRIVATE_KEY || process.env.VITE_IMAGEKIT_PRIVATE_KEY;
+
+    if (!urlEndpoint || !publicKey || !privateKey) {
       throw new Error('ImageKit environment variables are missing.');
     }
     imagekit = new ImageKit({
-      urlEndpoint: process.env.VITE_IMAGEKIT_URL_ENDPOINT,
-      publicKey: process.env.VITE_IMAGEKIT_PUBLIC_KEY,
-      privateKey: process.env.IMAGEKIT_PRIVATE_KEY
+      urlEndpoint,
+      publicKey,
+      privateKey
     });
   }
   return imagekit;
 };
+
+// API Route to fetch public configuration for ImageKit
+apiApp.get('/imagekit/config', (req, res) => {
+  res.json({
+    urlEndpoint: process.env.VITE_IMAGEKIT_URL_ENDPOINT || '',
+    publicKey: process.env.VITE_IMAGEKIT_PUBLIC_KEY || ''
+  });
+});
 
 // API Route to fetch auth parameters for client-side upload
 apiApp.get('/imagekit/auth', (req, res) => {
   try {
     const ik = getIkClient();
     const authenticationParameters = ik.getAuthenticationParameters();
-    res.json(authenticationParameters);
+    // Return publicKey along with signature, expire, token
+    res.json({
+        ...authenticationParameters,
+        publicKey: process.env.VITE_IMAGEKIT_PUBLIC_KEY || ''
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

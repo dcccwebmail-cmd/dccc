@@ -4,9 +4,6 @@ import { Trash2, Copy, Image as ImageIcon, Folder, Loader2, ChevronRight, Edit2,
 import { useToast } from '../../contexts/ToastContext';
 import { compressImageToWebP } from '../../services/imageService';
 
-const urlEndpoint = import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT || '';
-const publicKey = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY || '';
-
 const authenticator = async () => {
     try {
         const response = await fetch('/api/imagekit/auth');
@@ -40,6 +37,8 @@ interface MediaBrowserProps {
 
 export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode = false }) => {
     const { showToast } = useToast();
+    const [urlEndpoint, setUrlEndpoint] = useState<string>(import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT || '');
+    const [publicKey, setPublicKey] = useState<string>(import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY || '');
     const [allFiles, setAllFiles] = useState<MediaFile[]>([]);
     const [folders, setFolders] = useState<string[]>([]);
     const [currentPath, setCurrentPath] = useState<string>('/');
@@ -113,6 +112,22 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
     };
 
     const isConfigured = Boolean(urlEndpoint && publicKey);
+
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const res = await fetch('/api/imagekit/config');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.urlEndpoint) setUrlEndpoint(data.urlEndpoint);
+                    if (data.publicKey) setPublicKey(data.publicKey);
+                }
+            } catch (err) {
+                console.error("Failed to fetch ImageKit config", err);
+            }
+        };
+        fetchConfig();
+    }, []);
 
     const fetchAllData = async () => {
         if (!isConfigured) return;
