@@ -153,8 +153,11 @@ export interface IdCardConfig {
     customFontName?: string; // Name of the uploaded file
     fields: {
         name?: IdCardField;
+        name_bn?: IdCardField;
         id?: IdCardField;
         roll?: IdCardField;
+        section?: IdCardField;
+        session?: IdCardField;
         phone?: IdCardField;
         blood_group?: IdCardField;
         photo?: { x: number; y: number; width: number; height: number }; // Special config for photo

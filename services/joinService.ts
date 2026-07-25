@@ -9,29 +9,38 @@ const GOOGLE_SHEET_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxrbMNL
 const COLLECTION = 'join_requests';
 const METADATA_DOC = 'globals/metadata'; // Store counters here
 
-export const submitJoinRequest = async (data: Omit<JoinRequest, 'id' | 'status' | 'submitted_at'>) => {
+export const submitJoinRequest = async (data: Omit<JoinRequest, 'id' | 'status' | 'submitted_at'> & { status?: 'pending' | 'approved' }) => {
   if (!db) throw new Error("Database not initialized");
   
+  const status = data.status || 'pending';
+  const assignedId = data.assignedId || null;
+
   // 1. Save to Firestore (Primary)
-  const docRef = await db.collection(COLLECTION).add({
+  const payload: any = {
     ...data,
-    status: 'pending',
+    status,
     submitted_at: new Date().toISOString()
-  });
+  };
+
+  if (assignedId) {
+    payload.assignedId = assignedId;
+  }
+
+  const docRef = await db.collection(COLLECTION).add(payload);
 
   // 2. Send to Google Sheets (Secondary/Backup)
-  // Sends the entire object. The Apps Script must parse this hierarchy.
   if (GOOGLE_SHEET_SCRIPT_URL) {
       try {
           const sheetPayload = {
               id: docRef.id,
-              status: 'pending',
-              ...data
+              status,
+              ...data,
+              ...(assignedId ? { assignedId } : {})
           };
           
           await fetch(GOOGLE_SHEET_SCRIPT_URL, {
               method: 'POST',
-              mode: 'no-cors', // Important: Google Scripts don't support CORS for POST requests from browser
+              mode: 'no-cors',
               headers: {
                   'Content-Type': 'application/json',
               },
@@ -42,6 +51,8 @@ export const submitJoinRequest = async (data: Omit<JoinRequest, 'id' | 'status' 
           console.error("Failed to send to Google Sheet", sheetError);
       }
   }
+
+  return docRef.id;
 };
 
 export const getJoinRequests = async () => {

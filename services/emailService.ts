@@ -28,7 +28,7 @@ const getBase64ImageFromUrl = async (imageUrl: string): Promise<string> => {
     }
 };
 
-const generateIdCardPdf = async (userData: JoinRequest, config: IdCardConfig): Promise<string> => {
+export const generateIdCardPdf = async (userData: JoinRequest, config: IdCardConfig, download = false): Promise<string> => {
     // Initialize jsPDF
     // @ts-ignore
     const doc = new jsPDF({
@@ -107,8 +107,14 @@ const generateIdCardPdf = async (userData: JoinRequest, config: IdCardConfig): P
         };
 
         if (config.fields.name) addText(userData.personal.name_en, config.fields.name);
+        // @ts-ignore
+        if (config.fields.name_bn) addText(userData.personal.name_bn, config.fields.name_bn);
         if (config.fields.id) addText(userData.assignedId || 'PENDING', config.fields.id);
         if (config.fields.roll) addText(userData.academic.roll, config.fields.roll);
+        // @ts-ignore
+        if (config.fields.section) addText(userData.academic.section, config.fields.section);
+        // @ts-ignore
+        if (config.fields.session) addText(userData.academic.session || '', config.fields.session);
         if (config.fields.phone) addText(userData.contact.phone, config.fields.phone);
         
         if (config.fields.blood_group) {
@@ -117,6 +123,10 @@ const generateIdCardPdf = async (userData: JoinRequest, config: IdCardConfig): P
 
     } catch (error) {
         console.error("Error generating PDF graphics", error);
+    }
+
+    if (download) {
+        doc.save(`DCCC_ID_${userData.personal.name_en.replace(/\s/g, '_')}.pdf`);
     }
 
     // Return pure base64 string (without data:application/pdf;base64, prefix)
@@ -143,11 +153,14 @@ export const sendBrevoEmail = async ({ brevoConfig, to, subject, htmlContent, us
         }
     }
 
-    // Replace basic variables in body
+    // Replace variables in body with case-insensitive robust regexes allowing optional spaces
     let finalBody = htmlContent
-        .replace(/{{name}}/g, userData.personal.name_en)
-        .replace(/{{id}}/g, userData.assignedId || 'Pending')
-        .replace(/{{roll}}/g, userData.academic.roll);
+        .replace(/{{\s*name\s*}}/gi, userData.personal.name_en || '')
+        .replace(/{{\s*name_bn\s*}}/gi, userData.personal.name_bn || '')
+        .replace(/{{\s*id\s*}}/gi, userData.assignedId || 'Pending')
+        .replace(/{{\s*roll\s*}}/gi, userData.academic.roll || '')
+        .replace(/{{\s*section\s*}}/gi, userData.academic.section || '')
+        .replace(/{{\s*phone\s*}}/gi, userData.contact.phone || '');
 
     const payload = {
         sender: {

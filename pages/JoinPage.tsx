@@ -8,6 +8,7 @@ import SectionWrapper from '../components/SectionWrapper';
 import { useToast } from '../contexts/ToastContext';
 import { useData } from '../contexts/DataContext';
 import { compressImageToWebP } from '../services/imageService';
+import { verifyOfflineForm, markOfflineFormAsRegistered } from '../services/offlineFormService';
 
 const steps = [
     { id: 1, label: 'রেজিস্ট্রেশন\nRegistration' },
@@ -193,6 +194,8 @@ const JoinPage: React.FC = () => {
     };
 
     const handleSubmit = async () => {
+        let offlineSoldRecord: any = null;
+
         if (regType === 'new') {
             if (!selectedPaymentMethod) { showToast('Please select a payment method.', 'error'); return; }
             if (!formData.trx_id) { showToast('Please enter Transaction ID.', 'error'); return; }
@@ -200,6 +203,26 @@ const JoinPage: React.FC = () => {
             const dcccRegex = /^DCCC-\d{2}-[A-Z]-\d{3}$/;
             if (!dcccRegex.test(formData.dccc_id)) {
                 showToast('Invalid DCCC ID Format. Expected: DCCC-00-A-000', 'error');
+                return;
+            }
+            
+            setIsSubmitting(true);
+            try {
+                const record = await verifyOfflineForm(formData.phone, formData.dccc_id);
+                if (!record) {
+                    showToast('আপনার মোবাইল নম্বর অথবা ডি সি সি আইডি (DCCC ID) মেলেনি। দয়া করে সঠিক তথ্য দিন।', 'error');
+                    setIsSubmitting(false);
+                    return;
+                }
+                if (record.is_registered) {
+                    showToast('এই ডি সি সি আইডিটি (DCCC ID) ইতিমধ্যেই নিবন্ধিত হয়েছে।', 'error');
+                    setIsSubmitting(false);
+                    return;
+                }
+                offlineSoldRecord = record;
+            } catch (err: any) {
+                showToast('Offline form verification failed. Please try again.', 'error');
+                setIsSubmitting(false);
                 return;
             }
         }
@@ -240,7 +263,7 @@ const JoinPage: React.FC = () => {
                 imageUrl = json.url;
             }
 
-            const servicePayload = {
+            const servicePayload: any = {
                 personal: { 
                     name_bn: formData.name_bn,
                     name_en: formData.name_en,
@@ -284,7 +307,17 @@ const JoinPage: React.FC = () => {
                 }
             };
 
-            await submitJoinRequest(servicePayload);
+            if (offlineSoldRecord) {
+                servicePayload.status = 'approved';
+                servicePayload.assignedId = formData.dccc_id;
+            }
+
+            const reqId = await submitJoinRequest(servicePayload);
+
+            if (offlineSoldRecord && reqId) {
+                await markOfflineFormAsRegistered(offlineSoldRecord.id!, reqId);
+            }
+
             setIsSuccess(true);
             window.scrollTo(0, 0);
         } catch (error: any) {

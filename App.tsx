@@ -90,7 +90,7 @@ const PublicSiteLayout: React.FC = () => {
 
 const FullPageLoader: React.FC = () => (
     <div className="min-h-screen w-full flex items-center justify-center bg-background">
-        <img src="https://dhakacollegeculturalclub.com/logo.png" alt="Loading..." className="h-16 w-16 animate-pulse" />
+        <img src="https://ik.imagekit.io/dccc/dccc-logo.png" alt="Loading..." className="h-16 w-16 animate-pulse" />
     </div>
 );
 

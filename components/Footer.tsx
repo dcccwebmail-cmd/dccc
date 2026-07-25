@@ -18,6 +18,7 @@ const SocialLink: React.FC<{ href: string; children: React.ReactNode; label: str
 
 const Footer: React.FC = () => {
   const { data } = useData();
+  const [footerLogoError, setFooterLogoError] = React.useState(false);
   const footerData = data?.footer;
 
   if (!footerData) {
@@ -31,7 +32,21 @@ const Footer: React.FC = () => {
   return (
     <footer className="text-text-secondary">
       <div className="max-w-screen-xl mx-auto py-12 px-4 sm:px-6 lg:px-8 text-center">
-        <img src="https://ik.imagekit.io/dccc/dccc-logo.png" className="h-12 mx-auto mb-6" alt="DCCC Logo" />
+        {!footerLogoError ? (
+          <img 
+            src="https://ik.imagekit.io/dccc/clg-club.png" 
+            className="h-12 mx-auto mb-6 object-contain" 
+            alt="DCCC Logo" 
+            onError={() => setFooterLogoError(true)}
+          />
+        ) : (
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <div className="h-10 w-10 rounded-full bg-accent text-white flex items-center justify-center font-black text-lg shadow-md font-poppins">
+              D
+            </div>
+            <span className="font-extrabold text-xl tracking-wider text-text-primary font-poppins">DCCC</span>
+          </div>
+        )}
         <p className="max-w-2xl mx-auto mb-8">
           {footerData.footer_about}
         </p>
@@ -52,8 +67,6 @@ const Footer: React.FC = () => {
         <div className="pt-8 mt-4 border-t border-border-color text-sm">
             <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-4">
                 <p>{dynamicCopyrightText}</p>
-                <span className="hidden md:inline">•</span>
-                <Link to="/admin" className="hover:text-accent transition-colors">Admin Panel</Link>
             </div>
         </div>
       </div>

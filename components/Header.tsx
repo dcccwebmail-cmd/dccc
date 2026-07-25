@@ -17,6 +17,7 @@ const NavItem: React.FC<{ to: string; children: React.ReactNode; onClick?: () =>
 const Header: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const { data } = useData();
   const heroData = data?.hero;
   const navRef = useRef<HTMLElement>(null);
@@ -76,7 +77,21 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between w-full py-2 px-3">
           {/* Left: Logo */}
           <Link to="/" className="flex-shrink-0 flex items-center" onClick={closeMenu}>
-            <img src="https://ik.imagekit.io/dccc/dccc-logo.png" className="h-10" alt="DCCC Logo" />
+            {!logoError ? (
+              <img 
+                src="https://ik.imagekit.io/dccc/dccc-logo.png" 
+                className="h-10 object-contain" 
+                alt="DCCC Logo" 
+                onError={() => setLogoError(true)}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-accent text-white flex items-center justify-center font-black text-sm shadow-md font-poppins">
+                  D
+                </div>
+                <span className="font-extrabold text-base tracking-wider text-text-primary font-poppins">DCCC</span>
+              </div>
+            )}
           </Link>
           
           {/* Right: Menus */}
