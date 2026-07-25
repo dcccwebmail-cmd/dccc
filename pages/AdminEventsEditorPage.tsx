@@ -4,6 +4,7 @@ import { useData } from '../contexts/DataContext';
 import { Event } from '../types';
 import AdminEditModal from '../components/admin/AdminEditModal';
 import FormInput from '../components/admin/FormInput';
+import ImageInput from '../components/admin/ImageInput';
 import RichTextEditor from '../components/admin/RichTextEditor';
 import { useToast } from '../contexts/ToastContext';
 
@@ -300,7 +301,7 @@ const AdminEventsEditorPage: React.FC<AdminEventsEditorPageProps> = ({ onLogout 
             <FormInput label="Start Date/Time (GMT+6)" name="start_date" type="datetime-local" value={utcToBdtInput(editingEvent.start_date)} onChange={handleModalChange} required error={errors.start_date} />
             <FormInput label="End Date/Time (GMT+6)" name="end_date" type="datetime-local" value={utcToBdtInput(editingEvent.end_date)} onChange={handleModalChange} error={errors.end_date} />
             {errors.date_logic && <p className="-mt-3 text-sm text-red-500">{errors.date_logic}</p>}
-            <FormInput label="Banner URL" name="banner_url" value={editingEvent.banner_url} onChange={handleModalChange} />
+            <ImageInput label="Banner URL" name="banner_url" value={editingEvent.banner_url} onChange={handleModalChange} />
             <FormInput label="Registration Link" name="registration_link" value={editingEvent.registration_link || ''} onChange={handleModalChange} />
             <FormInput label="Venue" name="venue" value={editingEvent.venue || ''} onChange={handleModalChange} required error={errors.venue}/>
             

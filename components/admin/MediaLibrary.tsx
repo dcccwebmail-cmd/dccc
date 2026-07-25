@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { IKContext, IKUpload } from 'imagekitio-react';
+import { IKContext } from 'imagekitio-react';
 import { Trash2, Copy, Image as ImageIcon, Folder, Loader2, ChevronRight, Edit2, Check, X, FolderPlus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { compressImageToWebP } from '../../services/imageService';
 
 const urlEndpoint = import.meta.env.VITE_IMAGEKIT_URL_ENDPOINT || '';
 const publicKey = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY || '';
@@ -48,6 +49,68 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
     // Rename state
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
+    const [isDragActive, setIsDragActive] = useState(false);
+
+    const handleDrag = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setIsDragActive(true);
+        } else if (e.type === "dragleave") {
+            setIsDragActive(false);
+        }
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragActive(false);
+
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const file = e.dataTransfer.files[0];
+            await uploadProcessedFile(file);
+        }
+    };
+
+    const uploadProcessedFile = async (file: File) => {
+        if (!file.type.startsWith('image/')) {
+            showToast('Please upload an image file.', 'error');
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const compressedFile = await compressImageToWebP(file, 1200, 0.8);
+            const authData = await authenticator();
+
+            const uploadData = new FormData();
+            uploadData.append('file', compressedFile);
+            uploadData.append('fileName', compressedFile.name);
+            uploadData.append('folder', currentPath);
+            uploadData.append('publicKey', publicKey);
+            uploadData.append('signature', authData.signature);
+            uploadData.append('expire', authData.expire.toString());
+            uploadData.append('token', authData.token);
+            uploadData.append('useUniqueFileName', 'true');
+
+            const res = await fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
+                method: 'POST',
+                body: uploadData,
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.message || 'Image upload failed.');
+            }
+
+            const json = await res.json();
+            onSuccess(json);
+        } catch (err: any) {
+            onError(err);
+        } finally {
+            setUploading(false);
+        }
+    };
 
     const isConfigured = Boolean(urlEndpoint && publicKey);
 
@@ -210,27 +273,50 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
     return (
         <IKContext urlEndpoint={urlEndpoint} publicKey={publicKey} authenticator={authenticator}>
             {/* Upload Area */}
-            <div className={`bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-border-color mb-6`}>
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div>
-                        <h3 className="font-semibold text-lg text-text-primary">Upload Here</h3>
-                        <p className="text-xs text-text-secondary">Uploading to: {currentPath}</p>
+            <div 
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                className={`p-6 rounded-lg border-2 border-dashed transition-all duration-200 mb-6 flex flex-col items-center justify-center cursor-pointer relative min-h-[140px] ${
+                    isDragActive 
+                        ? 'border-accent bg-accent/10 dark:bg-accent/5' 
+                        : 'border-border-color bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100/70 dark:hover:bg-slate-800/80'
+                }`}
+                onClick={() => document.getElementById('media-file-input')?.click()}
+            >
+                <input 
+                    type="file" 
+                    id="media-file-input" 
+                    className="hidden" 
+                    accept="image/*" 
+                    onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                            await uploadProcessedFile(e.target.files[0]);
+                        }
+                    }} 
+                />
+                <div className="flex flex-col items-center space-y-2 text-center pointer-events-none">
+                    <div className="p-3 bg-accent/10 rounded-full text-accent">
+                        <ImageIcon className="w-8 h-8" />
                     </div>
-                    <div className="flex-1 mt-2 md:mt-0 max-w-sm ml-auto relative">
-                        <IKUpload
-                            fileName="customImage"
-                            folder={currentPath}
-                            onError={onError}
-                            onSuccess={onSuccess}
-                            onUploadStart={() => setUploading(true)}
-                            className="block w-full text-sm text-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-white hover:file:bg-accent-hover cursor-pointer"
-                        />
+                    <div>
+                        <p className="font-semibold text-text-primary text-base">
+                            {isDragActive ? "Drop image here to upload" : "Drag & drop your image here, or click to browse"}
+                        </p>
+                        <p className="text-xs text-text-secondary mt-1">
+                            Images will automatically be compressed & converted to WebP format.
+                        </p>
+                        <p className="text-xs text-accent mt-2 font-medium">
+                            Uploading to: {currentPath}
+                        </p>
                     </div>
                 </div>
+
                 {uploading && (
-                    <div className="mt-2 flex items-center space-x-2 text-sm text-accent">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Uploading...</span>
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-[2px] flex flex-col items-center justify-center space-y-2 rounded-lg z-10">
+                        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                        <span className="text-sm font-medium text-accent">Processing, Compressing & Uploading...</span>
                     </div>
                 )}
             </div>

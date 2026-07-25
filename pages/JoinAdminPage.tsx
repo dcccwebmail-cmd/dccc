@@ -8,6 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useData } from '../contexts/DataContext';
 import RichTextEditor from '../components/admin/RichTextEditor';
 import FormInput from '../components/admin/FormInput';
+import ImageInput from '../components/admin/ImageInput';
 import AdminEditModal from '../components/admin/AdminEditModal';
 import { JoinContent, PaymentMethod, IdCardConfig, JoinRequest, IdCardField } from '../types';
 
@@ -51,7 +52,8 @@ const FieldPreview: React.FC<{
     isSelected: boolean;
     hasCustomFont: boolean;
     onMouseDown: (e: React.MouseEvent, field: string) => void;
-}> = ({ field, config, scale, isSelected, hasCustomFont, onMouseDown }) => {
+    onTouchStart: (e: React.TouchEvent, field: string) => void;
+}> = ({ field, config, scale, isSelected, hasCustomFont, onMouseDown, onTouchStart }) => {
     
     if (field === 'photo') {
         const style: React.CSSProperties = {
@@ -70,7 +72,11 @@ const FieldPreview: React.FC<{
             fontSize: '10px'
         };
         return (
-            <div style={style} onMouseDown={(e) => onMouseDown(e, field)}>
+            <div 
+                style={style} 
+                onMouseDown={(e) => onMouseDown(e, field)}
+                onTouchStart={(e) => onTouchStart(e, field)}
+            >
                 PHOTO
                 {isSelected && <div className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full" style={{ transform: 'translate(50%, -50%)' }}></div>}
             </div>
@@ -82,6 +88,7 @@ const FieldPreview: React.FC<{
         left: `${config.x * scale}px`,
         top: `${config.y * scale}px`,
         fontSize: `${config.fontSize * scale * 0.3527}px`, // conversion point (approx for PDF pt to screen px)
+        lineHeight: 1,
         color: config.color,
         fontWeight: config.fontWeight || 'normal',
         fontStyle: config.fontStyle || 'normal',
@@ -104,7 +111,11 @@ const FieldPreview: React.FC<{
     };
 
     return (
-        <div style={textStyle} onMouseDown={(e) => onMouseDown(e, field)}>
+        <div 
+            style={textStyle} 
+            onMouseDown={(e) => onMouseDown(e, field)}
+            onTouchStart={(e) => onTouchStart(e, field)}
+        >
             {placeholders[field] || field.toUpperCase()}
         </div>
     );
@@ -131,6 +142,8 @@ const JoinAdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
     const [selectedField, setSelectedField] = useState<string | null>(null);
     const [dragState, setDragState] = useState<{ field: string, startX: number, startY: number, initialX: number, initialY: number } | null>(null);
     const editorRef = useRef<HTMLDivElement>(null);
+    const [isDesignerOpen, setIsDesignerOpen] = useState(false);
+    const [designerMobileTab, setDesignerMobileTab] = useState<'bg' | 'layers' | 'properties'>('bg');
     
     // Default zoom to fit roughly in the panel
     const [zoom, setZoom] = useState(3.5); 
@@ -322,6 +335,93 @@ const JoinAdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
 
     const handleMouseUp = () => {
         setDragState(null);
+    };
+
+    const handleCanvasTouchStart = (e: React.TouchEvent, field: string) => {
+        e.stopPropagation();
+        const touch = e.touches[0];
+        
+        const currentConfig = joinContent?.idCardConfig;
+        if (!currentConfig) return;
+        
+        let initialPos = { x: 0, y: 0 };
+        // @ts-ignore
+        const fieldData = currentConfig.fields[field];
+        if (fieldData) {
+            initialPos = { x: fieldData.x, y: fieldData.y };
+        }
+
+        setSelectedField(field);
+        setDragState({
+            field,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            initialX: initialPos.x,
+            initialY: initialPos.y
+        });
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!dragState || !joinContent?.idCardConfig) return;
+        
+        const touch = e.touches[0];
+        const dx = (touch.clientX - dragState.startX) / zoom;
+        const dy = (touch.clientY - dragState.startY) / zoom;
+        
+        const newX = Math.round(dragState.initialX + dx);
+        const newY = Math.round(dragState.initialY + dy);
+        
+        const currentConfig = joinContent.idCardConfig;
+        // @ts-ignore
+        const updatedFields = { ...currentConfig.fields, [dragState.field]: { ...currentConfig.fields[dragState.field], x: newX, y: newY } };
+        
+        setJoinContent({ ...joinContent, idCardConfig: { ...currentConfig, fields: updatedFields } });
+    };
+
+    const handleNudge = (axis: 'x' | 'y' | 'width' | 'height', delta: number) => {
+        if (!selectedField || !joinContent?.idCardConfig) return;
+        const currentConfig = joinContent.idCardConfig;
+        // @ts-ignore
+        const currentVal = (currentConfig.fields[selectedField])[axis] || 0;
+        const newVal = Math.max(0, currentVal + delta);
+        
+        // @ts-ignore
+        const updatedFields = { 
+            ...currentConfig.fields, 
+            [selectedField]: { ...currentConfig.fields[selectedField], [axis]: newVal } 
+        };
+        setJoinContent({ ...joinContent, idCardConfig: { ...currentConfig, fields: updatedFields } });
+    };
+
+    const handleBackgroundChange = (url: string) => {
+        if (!joinContent?.idCardConfig) return;
+        
+        const updatedConfig = {
+            ...joinContent.idCardConfig,
+            backgroundImageUrl: url
+        };
+        
+        if (url) {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                const aspect = img.height / img.width;
+                const currentWidth = updatedConfig.width || 85;
+                const newHeight = Math.round(currentWidth * aspect);
+                updatedConfig.height = newHeight;
+                setJoinContent({
+                    ...joinContent,
+                    idCardConfig: updatedConfig
+                });
+                showToast(`Background updated and auto-fitted to ${currentWidth}mm x ${newHeight}mm!`);
+            };
+            img.src = url;
+        } else {
+            setJoinContent({
+                ...joinContent,
+                idCardConfig: updatedConfig
+            });
+        }
     };
 
     const handlePropChange = (key: string, value: any) => {
@@ -603,226 +703,31 @@ const JoinAdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
                                 )}
 
                                 {settingsTab === 'id_card' && (
-                                    <div className="flex flex-col h-full">
-                                        {/* Editor Toolbar */}
-                                        <div className="p-4 border-b border-border-color flex justify-between items-center bg-background/50 backdrop-blur-sm">
-                                            <div className="flex items-center gap-4">
-                                                <h2 className="font-bold text-lg">ID Card Designer</h2>
-                                                <div className="flex items-center gap-2 text-sm bg-background border border-border-color rounded-md px-2 py-1">
-                                                    <span>Zoom:</span>
-                                                    <button onClick={() => setZoom(z => Math.max(1, z - 0.5))} className="px-2 hover:bg-black/5">-</button>
-                                                    <span>{Math.round(zoom * 100 / 3.5)}%</span>
-                                                    <button onClick={() => setZoom(z => z + 0.5)} className="px-2 hover:bg-black/5">+</button>
-                                                </div>
+                                    <div className="p-8 overflow-y-auto h-full flex flex-col items-center justify-center text-center">
+                                        <div className="max-w-md bg-card-bg border border-border-color p-8 rounded-2xl shadow-xl space-y-6">
+                                            <div className="w-20 h-20 bg-accent/10 text-accent rounded-full flex items-center justify-center mx-auto">
+                                                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.333 0 4 1 4 3H7c0-2 2.667-3 3-3z" />
+                                                </svg>
                                             </div>
-                                            <button onClick={handleContentSubmit} disabled={isSavingContent} className="px-6 py-2 bg-accent text-accent-text font-bold rounded-md hover:bg-accent-hover shadow-sm transition-colors">{isSavingContent ? 'Saving...' : 'Save Layout'}</button>
-                                        </div>
-
-                                        <div className="flex flex-grow overflow-hidden">
-                                            {/* Canvas Area */}
-                                            <div className="flex-grow bg-gray-100 dark:bg-black/40 overflow-auto flex items-center justify-center p-8 relative" onClick={() => setSelectedField(null)}>
-                                                <div 
-                                                    ref={editorRef}
-                                                    className="bg-white shadow-2xl relative transition-all duration-200"
-                                                    style={{
-                                                        width: `${(joinContent.idCardConfig?.width || 85) * zoom}px`,
-                                                        height: `${(joinContent.idCardConfig?.height || 55) * zoom}px`,
-                                                        backgroundImage: `url(${joinContent.idCardConfig?.backgroundImageUrl})`,
-                                                        backgroundSize: '100% 100%',
-                                                        backgroundRepeat: 'no-repeat'
-                                                    }}
+                                            <div className="space-y-2">
+                                                <h2 className="text-2xl font-extrabold tracking-tight">ID Card Designer Studio</h2>
+                                                <p className="text-text-secondary text-sm">
+                                                    Design a highly precise, printable ID Card template. Adjust variables, dimensions, backgrounds, and fonts with real-time scaling and dual-screen mobile support.
+                                                </p>
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-3">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setIsDesignerOpen(true)}
+                                                    className="w-full py-3 bg-accent text-accent-text font-bold rounded-xl shadow-lg hover:bg-accent-hover transition-all transform hover:-translate-y-0.5"
                                                 >
-                                                    {ALL_AVAILABLE_FIELDS.map(field => {
-                                                        // @ts-ignore
-                                                        const conf = joinContent.idCardConfig?.fields[field];
-                                                        if (!conf) return null;
-                                                        return (
-                                                            <FieldPreview 
-                                                                key={field} 
-                                                                field={field} 
-                                                                config={conf} 
-                                                                scale={zoom}
-                                                                isSelected={selectedField === field}
-                                                                onMouseDown={handleCanvasMouseDown}
-                                                                hasCustomFont={!!joinContent.idCardConfig?.customFontData}
-                                                            />
-                                                        )
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            {/* Properties Panel */}
-                                            <div className="w-80 bg-background border-l border-border-color flex flex-col overflow-hidden">
-                                                <div className="p-6 overflow-y-auto flex-grow">
-                                                    <h3 className="font-bold text-lg mb-6 border-b border-border-color pb-2">Properties</h3>
-                                                    
-                                                    {selectedField ? (
-                                                        <div className="space-y-4 animate-fade-in-up">
-                                                            <div className="flex justify-between items-center bg-accent/10 p-2 rounded-lg">
-                                                                <span className="text-sm font-bold text-accent uppercase">{selectedField.replace('_', ' ')}</span>
-                                                                <div className="flex gap-2">
-                                                                    <button onClick={() => setSelectedField(null)} className="text-xs px-2 py-1 bg-background border rounded hover:bg-gray-100 dark:hover:bg-white/10" title="Deselect">✕</button>
-                                                                    <button onClick={deleteField} className="text-xs px-2 py-1 bg-red-100 text-red-600 border border-red-200 rounded hover:bg-red-200" title="Delete Element">🗑</button>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            {selectedField !== 'photo' && (
-                                                                <>
-                                                                    <div>
-                                                                        <label className="block text-xs text-text-secondary mb-1">Typography</label>
-                                                                        <div className="flex gap-2 mb-2">
-                                                                            <select 
-                                                                                value={(joinContent.idCardConfig?.fields as any)[selectedField].fontWeight || 'normal'} 
-                                                                                onChange={(e) => handlePropChange('fontWeight', e.target.value)}
-                                                                                className="w-full px-2 py-1 text-sm bg-card-bg border border-border-color rounded-md"
-                                                                            >
-                                                                                <option value="normal">Normal</option>
-                                                                                <option value="bold">Bold</option>
-                                                                            </select>
-                                                                        </div>
-                                                                        <div className="flex gap-2">
-                                                                            <button 
-                                                                                onClick={() => handlePropChange('fontStyle', (joinContent.idCardConfig?.fields as any)[selectedField].fontStyle === 'italic' ? 'normal' : 'italic')}
-                                                                                className={`flex-1 py-1 border rounded text-sm ${(joinContent.idCardConfig?.fields as any)[selectedField].fontStyle === 'italic' ? 'bg-accent text-white' : 'bg-card-bg'}`}
-                                                                            >
-                                                                                <span className="italic">I</span>
-                                                                            </button>
-                                                                            <button 
-                                                                                onClick={() => handlePropChange('textDecoration', (joinContent.idCardConfig?.fields as any)[selectedField].textDecoration === 'underline' ? 'none' : 'underline')}
-                                                                                className={`flex-1 py-1 border rounded text-sm ${(joinContent.idCardConfig?.fields as any)[selectedField].textDecoration === 'underline' ? 'bg-accent text-white' : 'bg-card-bg'}`}
-                                                                            >
-                                                                                <span className="underline">U</span>
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <div className="grid grid-cols-2 gap-4">
-                                                                        <div>
-                                                                            <label className="block text-xs text-text-secondary mb-1">Size (pt)</label>
-                                                                            <input type="number" value={(joinContent.idCardConfig?.fields as any)[selectedField].fontSize} onChange={(e) => handlePropChange('fontSize', parseInt(e.target.value))} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="block text-xs text-text-secondary mb-1">Color</label>
-                                                                            <div className="flex gap-2">
-                                                                                <input type="color" value={(joinContent.idCardConfig?.fields as any)[selectedField].color} onChange={(e) => handlePropChange('color', e.target.value)} className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer" />
-                                                                                <input type="text" value={(joinContent.idCardConfig?.fields as any)[selectedField].color} onChange={(e) => handlePropChange('color', e.target.value)} className="w-full px-2 py-1 text-xs bg-card-bg border rounded-md" />
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    <div>
-                                                                        <label className="block text-xs text-text-secondary mb-1">Alignment</label>
-                                                                        <div className="flex border border-border-color rounded-md overflow-hidden">
-                                                                            {['left', 'center', 'right'].map(align => (
-                                                                                <button 
-                                                                                    key={align} 
-                                                                                    onClick={() => handlePropChange('align', align)}
-                                                                                    className={`flex-1 py-1 text-xs capitalize ${(joinContent.idCardConfig?.fields as any)[selectedField].align === align ? 'bg-accent text-white' : 'bg-card-bg hover:bg-gray-100 dark:hover:bg-white/5'}`}
-                                                                                >
-                                                                                    {align}
-                                                                                </button>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                </>
-                                                            )}
-
-                                                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border-color">
-                                                                <div>
-                                                                    <label className="text-xs text-text-secondary">X (mm)</label>
-                                                                    <input type="number" value={(joinContent.idCardConfig?.fields as any)[selectedField].x} onChange={(e) => handlePropChange('x', parseInt(e.target.value))} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-xs text-text-secondary">Y (mm)</label>
-                                                                    <input type="number" value={(joinContent.idCardConfig?.fields as any)[selectedField].y} onChange={(e) => handlePropChange('y', parseInt(e.target.value))} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                </div>
-                                                                {selectedField === 'photo' && (
-                                                                    <>
-                                                                        <div>
-                                                                            <label className="text-xs text-text-secondary">W (mm)</label>
-                                                                            <input type="number" value={(joinContent.idCardConfig?.fields as any)[selectedField].width} onChange={(e) => handlePropChange('width', parseInt(e.target.value))} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                        </div>
-                                                                        <div>
-                                                                            <label className="text-xs text-text-secondary">H (mm)</label>
-                                                                            <input type="number" value={(joinContent.idCardConfig?.fields as any)[selectedField].height} onChange={(e) => handlePropChange('height', parseInt(e.target.value))} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                        </div>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-6">
-                                                            <div className="mb-6">
-                                                                <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Background Image</label>
-                                                                <div className="flex gap-2 mb-2">
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={joinContent.idCardConfig?.backgroundImageUrl || ''} 
-                                                                        onChange={(e) => updateJoinContent({ idCardConfig: { ...joinContent.idCardConfig, backgroundImageUrl: e.target.value } as any })}
-                                                                        className="flex-grow px-3 py-2 text-sm bg-card-bg border border-border-color rounded-md"
-                                                                        placeholder="Image URL"
-                                                                    />
-                                                                    <button 
-                                                                        onClick={handleAutoFitBackground}
-                                                                        className="px-3 py-2 bg-blue-100 text-blue-700 rounded-md text-xs font-bold hover:bg-blue-200"
-                                                                        title="Auto-calculate height based on image aspect ratio"
-                                                                    >
-                                                                        Auto-Fit
-                                                                    </button>
-                                                                </div>
-                                                                <div className="grid grid-cols-2 gap-2">
-                                                                    <div>
-                                                                        <label className="text-xs text-text-secondary">W (mm)</label>
-                                                                        <input type="number" value={joinContent.idCardConfig?.width} onChange={(e) => updateJoinContent({ idCardConfig: { ...joinContent.idCardConfig, width: parseInt(e.target.value) } as any })} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="text-xs text-text-secondary">H (mm)</label>
-                                                                        <input type="number" value={joinContent.idCardConfig?.height} onChange={(e) => updateJoinContent({ idCardConfig: { ...joinContent.idCardConfig, height: parseInt(e.target.value) } as any })} className="w-full px-2 py-1 text-sm bg-card-bg border rounded-md" />
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {/* Font Upload Section */}
-                                                                <div className="mt-4 pt-4 border-t border-border-color">
-                                                                    <label className="block text-xs font-semibold text-text-secondary uppercase mb-2">Custom Font (TTF)</label>
-                                                                    <input 
-                                                                        type="file" 
-                                                                        accept=".ttf,.otf"
-                                                                        onChange={handleFontUpload}
-                                                                        className="w-full text-xs text-text-secondary file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-accent/10 file:text-accent hover:file:bg-accent/20"
-                                                                    />
-                                                                    {joinContent.idCardConfig?.customFontName && (
-                                                                        <div className="flex justify-between items-center mt-2 bg-green-50 dark:bg-green-900/20 p-2 rounded">
-                                                                            <span className="text-xs text-green-600 dark:text-green-400 truncate max-w-[150px]" title={joinContent.idCardConfig.customFontName}>
-                                                                                Active: {joinContent.idCardConfig.customFontName}
-                                                                            </span>
-                                                                            <button onClick={removeCustomFont} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove</button>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="border-t border-border-color pt-4">
-                                                                <h4 className="font-bold text-sm mb-3">Layers</h4>
-                                                                <div className="space-y-2">
-                                                                    {ALL_AVAILABLE_FIELDS.map(field => {
-                                                                        // @ts-ignore
-                                                                        const isActive = !!joinContent.idCardConfig?.fields[field];
-                                                                        return (
-                                                                            <div key={field} className="flex items-center justify-between p-2 rounded-md bg-card-bg border border-border-color hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                                                                <span className="text-sm capitalize">{field.replace('_', ' ')}</span>
-                                                                                {isActive ? (
-                                                                                    <button onClick={() => setSelectedField(field)} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">Select</button>
-                                                                                ) : (
-                                                                                    <button onClick={() => addField(field)} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">+ Add</button>
-                                                                                )}
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                    Open ID Card Designer Studio
+                                                </button>
+                                                <p className="text-xs text-text-secondary">
+                                                    Current dimensions: {joinContent?.idCardConfig?.width || 85}mm x {joinContent?.idCardConfig?.height || 55}mm
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -850,7 +755,7 @@ const JoinAdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
                             <option value="Agent">Agent</option>
                         </FormInput>
                         <RichTextEditor label="Instructions" value={editingPayment.instructions} onChange={(val) => setEditingPayment({...editingPayment, instructions: val})} />
-                        <FormInput label="Logo URL (Optional)" name="imageUrl" value={editingPayment.imageUrl || ''} onChange={(e) => setEditingPayment({...editingPayment, imageUrl: e.target.value})} />
+                        <ImageInput label="Logo URL (Optional)" name="imageUrl" value={editingPayment.imageUrl || ''} onChange={(e) => setEditingPayment({...editingPayment, imageUrl: e.target.value})} />
                         <FormInput label="Video Tutorial URL (Optional)" name="videoUrl" value={editingPayment.videoUrl || ''} onChange={(e) => setEditingPayment({...editingPayment, videoUrl: e.target.value})} />
                         <div className="flex items-center gap-2">
                             <input type="checkbox" id="isActive" checked={editingPayment.isActive} onChange={(e) => setEditingPayment({...editingPayment, isActive: e.target.checked})} className="w-4 h-4 text-accent" />
@@ -859,6 +764,498 @@ const JoinAdminDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) =>
                     </div>
                 )}
             </AdminEditModal>
+
+            {/* ID Card Designer Fullscreen Studio */}
+            {isDesignerOpen && joinContent?.idCardConfig && (
+                <div 
+                    className="fixed inset-0 z-50 bg-background/98 flex flex-col text-text-primary overflow-hidden select-none font-sans"
+                    onMouseMove={handleMouseMove} 
+                    onMouseUp={handleMouseUp}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    {/* Header */}
+                    <div className="px-6 py-4 bg-card-bg border-b border-border-color flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-accent/10 rounded-lg text-accent hidden sm:block">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.333 0 4 1 4 3H7c0-2 2.667-3 3-3z" />
+                                </svg>
+                            </div>
+                            <div className="text-left">
+                                <h2 className="font-extrabold text-xl text-text-primary tracking-tight">DCCC ID Designer Studio</h2>
+                                <p className="text-xs text-text-secondary">
+                                    Canvas: <span className="font-semibold text-accent">{joinContent.idCardConfig.width || 85}mm × {joinContent.idCardConfig.height || 55}mm</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Interactive Zoom Controls */}
+                        <div className="flex items-center gap-3 bg-background border border-border-color px-3 py-1.5 rounded-xl text-sm">
+                            <span className="text-xs font-semibold text-text-secondary">Zoom:</span>
+                            <button 
+                                type="button" 
+                                onClick={() => setZoom(z => Math.max(1, z - 0.5))} 
+                                className="w-6 h-6 rounded-md hover:bg-black/5 dark:hover:bg-white/5 flex items-center justify-center font-bold"
+                            >
+                                -
+                            </button>
+                            <span className="font-mono font-bold text-accent min-w-[3rem] text-center">
+                                {Math.round(zoom * 100 / 3.5)}%
+                            </span>
+                            <button 
+                                type="button" 
+                                onClick={() => setZoom(z => Math.min(10, z + 0.5))} 
+                                className="w-6 h-6 rounded-md hover:bg-black/5 dark:hover:bg-white/5 flex items-center justify-center font-bold"
+                            >
+                                +
+                            </button>
+                        </div>
+
+                        {/* Studio Actions */}
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                            <button 
+                                type="button"
+                                onClick={() => {
+                                    if (confirm("Discard unsaved changes and close studio?")) {
+                                        setIsDesignerOpen(false);
+                                        setSelectedField(null);
+                                    }
+                                }} 
+                                className="flex-1 sm:flex-initial px-5 py-2 border border-border-color text-text-primary rounded-xl font-bold hover:bg-black/5 dark:hover:bg-white/5 transition-all text-sm"
+                            >
+                                Close Studio
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={async () => {
+                                    setIsSavingContent(true);
+                                    try {
+                                        await updateData({ join: joinContent });
+                                        showToast('ID Card design saved and applied successfully!');
+                                        setIsDesignerOpen(false);
+                                        setSelectedField(null);
+                                    } catch (e) {
+                                        showToast('Failed to save ID Card design.', 'error');
+                                    } finally {
+                                        setIsSavingContent(false);
+                                    }
+                                }}
+                                disabled={isSavingContent}
+                                className="flex-1 sm:flex-initial px-6 py-2 bg-accent text-accent-text font-bold rounded-xl shadow-lg hover:bg-accent-hover transition-all text-sm disabled:opacity-50"
+                            >
+                                {isSavingContent ? 'Saving...' : 'Save & Apply'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Workspace & Controls */}
+                    <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
+                        
+                        {/* Interactive Design Area */}
+                        <div 
+                            className="flex-grow bg-slate-900/10 dark:bg-black/40 overflow-auto flex items-center justify-center p-6 relative"
+                            onClick={() => setSelectedField(null)}
+                        >
+                            <div className="relative border border-dashed border-border-color p-4 bg-background/20 rounded-xl max-w-full overflow-auto">
+                                <div 
+                                    ref={editorRef}
+                                    className="bg-white shadow-2xl relative transition-all duration-200"
+                                    style={{
+                                        width: `${(joinContent.idCardConfig?.width || 85) * zoom}px`,
+                                        height: `${(joinContent.idCardConfig?.height || 55) * zoom}px`,
+                                        backgroundImage: `url(${joinContent.idCardConfig?.backgroundImageUrl})`,
+                                        backgroundSize: '100% 100%',
+                                        backgroundRepeat: 'no-repeat',
+                                        borderRadius: '4px'
+                                    }}
+                                >
+                                    {ALL_AVAILABLE_FIELDS.map(field => {
+                                        // @ts-ignore
+                                        const conf = joinContent.idCardConfig?.fields[field];
+                                        if (!conf) return null;
+                                        return (
+                                            <FieldPreview 
+                                                key={field} 
+                                                field={field} 
+                                                config={conf} 
+                                                scale={zoom}
+                                                isSelected={selectedField === field}
+                                                onMouseDown={handleCanvasMouseDown}
+                                                onTouchStart={handleCanvasTouchStart}
+                                                hasCustomFont={!!joinContent.idCardConfig?.customFontData}
+                                            />
+                                        )
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Mobile helper toast */}
+                            <div className="absolute bottom-4 left-4 right-4 text-center pointer-events-none block md:hidden">
+                                <span className="px-3 py-1.5 bg-black/80 text-white rounded-full text-xs font-semibold shadow-md">
+                                    💡 Drag components or select and use nudge controls below!
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Interactive Sidebar / Tabs (Background, Layers, Properties) */}
+                        <div className="w-full md:w-96 bg-card-bg border-t md:border-t-0 md:border-l border-border-color flex flex-col overflow-hidden max-h-[50vh] md:max-h-full">
+                            {/* Tabs Header */}
+                            <div className="flex border-b border-border-color bg-background/50">
+                                <button 
+                                    type="button"
+                                    onClick={() => setDesignerMobileTab('bg')}
+                                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${designerMobileTab === 'bg' ? 'border-accent text-accent' : 'border-transparent text-text-secondary hover:text-text-primary'}`}
+                                >
+                                    🎨 Canvas & Bg
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setDesignerMobileTab('layers')}
+                                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${designerMobileTab === 'layers' ? 'border-accent text-accent' : 'border-transparent text-text-secondary hover:text-text-primary'}`}
+                                >
+                                    🏷️ Layers
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setDesignerMobileTab('properties')}
+                                    className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${designerMobileTab === 'properties' ? 'border-accent text-accent' : 'border-transparent text-text-secondary hover:text-text-primary'} ${!selectedField ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    disabled={!selectedField}
+                                >
+                                    ⚙️ Properties
+                                </button>
+                            </div>
+
+                            {/* Tab Contents */}
+                            <div className="flex-grow overflow-y-auto p-6 space-y-6">
+                                
+                                {designerMobileTab === 'bg' && (
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <h4 className="font-bold text-sm text-text-primary text-left">Card Aspect & Dimensions</h4>
+                                            <p className="text-xs text-text-secondary text-left">Set target printable dimensions in millimeters (mm).</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-xs font-semibold text-text-secondary block mb-1 text-left">Width (mm)</label>
+                                                <input 
+                                                    type="number" 
+                                                    value={joinContent.idCardConfig?.width || 85} 
+                                                    onChange={(e) => updateJoinContent({ idCardConfig: { ...joinContent.idCardConfig, width: parseInt(e.target.value) || 85 } as any })} 
+                                                    className="w-full px-3 py-2 text-sm bg-background border border-border-color rounded-xl font-bold focus:border-accent outline-none" 
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-semibold text-text-secondary block mb-1 text-left">Height (mm)</label>
+                                                <input 
+                                                    type="number" 
+                                                    value={joinContent.idCardConfig?.height || 55} 
+                                                    onChange={(e) => updateJoinContent({ idCardConfig: { ...joinContent.idCardConfig, height: parseInt(e.target.value) || 55 } as any })} 
+                                                    className="w-full px-3 py-2 text-sm bg-background border border-border-color rounded-xl font-bold focus:border-accent outline-none" 
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="border-t border-border-color pt-4 space-y-3">
+                                            <div className="space-y-1">
+                                                <h4 className="font-bold text-sm text-text-primary text-left">Background Asset</h4>
+                                                <p className="text-xs text-text-secondary text-left">Paste your background image URL or select from media library. Aspect ratio auto-fit is built-in!</p>
+                                            </div>
+                                            <ImageInput 
+                                                label="Background Image URL"
+                                                name="backgroundImageUrl"
+                                                value={joinContent.idCardConfig?.backgroundImageUrl || ''}
+                                                onChange={(e) => handleBackgroundChange(e.target.value)}
+                                            />
+                                        </div>
+
+                                        {/* Custom Font Section */}
+                                        <div className="border-t border-border-color pt-4 space-y-3">
+                                            <div>
+                                                <h4 className="font-bold text-sm text-text-primary text-left">Custom Typography (Font File)</h4>
+                                                <p className="text-xs text-text-secondary text-left">Upload a TTF or OTF font to render fields perfectly in high quality.</p>
+                                            </div>
+                                            <input 
+                                                type="file" 
+                                                accept=".ttf,.otf"
+                                                onChange={handleFontUpload}
+                                                className="w-full text-xs text-text-secondary file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-accent/10 file:text-accent hover:file:bg-accent/20 cursor-pointer"
+                                            />
+                                            {joinContent.idCardConfig?.customFontName && (
+                                                <div className="flex justify-between items-center mt-2 bg-green-50 dark:bg-green-900/20 p-2.5 rounded-xl border border-green-200 dark:border-green-900/40">
+                                                    <span className="text-xs text-green-600 dark:text-green-400 truncate max-w-[150px]" title={joinContent.idCardConfig.customFontName}>
+                                                        Active: {joinContent.idCardConfig.customFontName}
+                                                    </span>
+                                                    <button type="button" onClick={removeCustomFont} className="text-xs text-red-500 hover:text-red-700 font-bold">Remove</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {designerMobileTab === 'layers' && (
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <h4 className="font-bold text-sm text-text-primary text-left">Available Card Fields</h4>
+                                            <p className="text-xs text-text-secondary text-left">Select active text variables or photo field to style and place on the card.</p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {ALL_AVAILABLE_FIELDS.map(field => {
+                                                // @ts-ignore
+                                                const isActive = !!joinContent.idCardConfig?.fields[field];
+                                                const isCurrent = selectedField === field;
+                                                return (
+                                                    <div 
+                                                        key={field} 
+                                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                                            isCurrent 
+                                                                ? 'bg-accent/10 border-accent' 
+                                                                : 'bg-background/50 border-border-color hover:bg-black/5 dark:hover:bg-white/5'
+                                                        }`}
+                                                    >
+                                                        <span className="text-sm font-semibold capitalize">{field.replace('_', ' ')}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            {isActive ? (
+                                                                <>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setSelectedField(field);
+                                                                            setDesignerMobileTab('properties');
+                                                                        }} 
+                                                                        className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${
+                                                                            isCurrent 
+                                                                                ? 'bg-accent text-white' 
+                                                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                                                        }`}
+                                                                    >
+                                                                        {isCurrent ? 'Selected' : 'Edit'}
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => addField(field)} 
+                                                                    className="text-xs px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-bold"
+                                                                >
+                                                                    + Add
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {designerMobileTab === 'properties' && selectedField && (
+                                    <div className="space-y-5">
+                                        <div className="flex justify-between items-center bg-accent/10 p-3 rounded-xl border border-accent/20">
+                                            <span className="text-sm font-extrabold text-accent uppercase tracking-wide">{selectedField.replace('_', ' ')}</span>
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setSelectedField(null)} 
+                                                    className="text-xs px-2.5 py-1.5 bg-background border rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 font-bold" 
+                                                    title="Deselect"
+                                                >
+                                                    ✕
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={deleteField} 
+                                                    className="text-xs px-2.5 py-1.5 bg-red-100 text-red-600 border border-red-200 rounded-lg hover:bg-red-200 font-bold" 
+                                                    title="Delete Element"
+                                                >
+                                                    🗑
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Properties controls depending on text vs photo */}
+                                        {selectedField !== 'photo' ? (
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-text-secondary mb-1 text-left">Font Size (pt)</label>
+                                                        <input 
+                                                            type="number" 
+                                                            value={(joinContent.idCardConfig?.fields as any)[selectedField].fontSize || 10} 
+                                                            onChange={(e) => handlePropChange('fontSize', parseInt(e.target.value) || 6)} 
+                                                            className="w-full px-3 py-1.5 text-sm bg-background border border-border-color rounded-xl font-bold text-left" 
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-text-secondary mb-1 text-left">Color</label>
+                                                        <div className="flex gap-1.5">
+                                                            <input 
+                                                                type="color" 
+                                                                value={(joinContent.idCardConfig?.fields as any)[selectedField].color || '#000000'} 
+                                                                onChange={(e) => handlePropChange('color', e.target.value)} 
+                                                                className="w-9 h-9 p-0 border-none bg-transparent cursor-pointer rounded-lg overflow-hidden" 
+                                                            />
+                                                            <input 
+                                                                type="text" 
+                                                                value={(joinContent.idCardConfig?.fields as any)[selectedField].color || '#000000'} 
+                                                                onChange={(e) => handlePropChange('color', e.target.value)} 
+                                                                className="w-full px-2 py-1.5 text-xs bg-background border border-border-color rounded-xl font-mono text-left" 
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-text-secondary mb-1 text-left">Font Formatting</label>
+                                                    <div className="flex gap-2">
+                                                        <select 
+                                                            value={(joinContent.idCardConfig?.fields as any)[selectedField].fontWeight || 'normal'} 
+                                                            onChange={(e) => handlePropChange('fontWeight', e.target.value)}
+                                                            className="flex-grow px-3 py-1.5 text-sm bg-background border border-border-color rounded-xl font-bold"
+                                                        >
+                                                            <option value="normal">Normal</option>
+                                                            <option value="bold">Bold</option>
+                                                        </select>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handlePropChange('fontStyle', (joinContent.idCardConfig?.fields as any)[selectedField].fontStyle === 'italic' ? 'normal' : 'italic')}
+                                                            className={`w-10 h-9 border rounded-xl flex items-center justify-center font-bold text-sm transition-all ${(joinContent.idCardConfig?.fields as any)[selectedField].fontStyle === 'italic' ? 'bg-accent text-white border-accent' : 'bg-background hover:bg-black/5 dark:hover:bg-white/5 border-border-color'}`}
+                                                        >
+                                                            <span className="italic font-serif">I</span>
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handlePropChange('textDecoration', (joinContent.idCardConfig?.fields as any)[selectedField].textDecoration === 'underline' ? 'none' : 'underline')}
+                                                            className={`w-10 h-9 border rounded-xl flex items-center justify-center font-bold text-sm transition-all ${(joinContent.idCardConfig?.fields as any)[selectedField].textDecoration === 'underline' ? 'bg-accent text-white border-accent' : 'bg-background hover:bg-black/5 dark:hover:bg-white/5 border-border-color'}`}
+                                                        >
+                                                            <span className="underline">U</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-text-secondary mb-1 text-left">Alignment</label>
+                                                    <div className="flex border border-border-color rounded-xl overflow-hidden bg-background">
+                                                        {['left', 'center', 'right'].map(align => (
+                                                            <button 
+                                                                key={align} 
+                                                                type="button"
+                                                                onClick={() => handlePropChange('align', align)}
+                                                                className={`flex-1 py-1.5 text-xs font-bold capitalize transition-colors ${
+                                                                    (joinContent.idCardConfig?.fields as any)[selectedField].align === align 
+                                                                        ? 'bg-accent text-white' 
+                                                                        : 'bg-background hover:bg-black/5 dark:hover:bg-white/5'
+                                                                }`}
+                                                            >
+                                                                {align}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="text-xs font-semibold text-text-secondary block mb-1 text-left">Width (mm)</label>
+                                                        <input 
+                                                            type="number" 
+                                                            value={(joinContent.idCardConfig?.fields as any)[selectedField].width || 20} 
+                                                            onChange={(e) => handlePropChange('width', parseInt(e.target.value) || 5)} 
+                                                            className="w-full px-3 py-1.5 text-sm bg-background border border-border-color rounded-xl font-bold text-left" 
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs font-semibold text-text-secondary block mb-1 text-left">Height (mm)</label>
+                                                        <input 
+                                                            type="number" 
+                                                            value={(joinContent.idCardConfig?.fields as any)[selectedField].height || 20} 
+                                                            onChange={(e) => handlePropChange('height', parseInt(e.target.value) || 5)} 
+                                                            className="w-full px-3 py-1.5 text-sm bg-background border border-border-color rounded-xl font-bold text-left" 
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Coordinate precision details */}
+                                        <div className="border-t border-border-color pt-4 space-y-4">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-xs font-semibold text-text-secondary block mb-1 text-left">X Coord (mm)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        value={(joinContent.idCardConfig?.fields as any)[selectedField].x || 0} 
+                                                        onChange={(e) => handlePropChange('x', parseInt(e.target.value) || 0)} 
+                                                        className="w-full px-3 py-1.5 text-sm bg-background border border-border-color rounded-xl font-bold text-left" 
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-semibold text-text-secondary block mb-1 text-left">Y Coord (mm)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        value={(joinContent.idCardConfig?.fields as any)[selectedField].y || 0} 
+                                                        onChange={(e) => handlePropChange('y', parseInt(e.target.value) || 0)} 
+                                                        className="w-full px-3 py-1.5 text-sm bg-background border border-border-color rounded-xl font-bold text-left" 
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* JOYPAD / NUDGE */}
+                                            <div className="bg-background/40 p-3.5 rounded-xl border border-border-color space-y-2">
+                                                <label className="block text-xs font-bold text-text-secondary text-center uppercase tracking-wider">Position Joystick (±1mm)</label>
+                                                <div className="grid grid-cols-3 gap-2 w-32 mx-auto">
+                                                    <div></div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleNudge('y', -1)} 
+                                                        className="h-10 w-10 bg-card-bg hover:bg-black/10 dark:hover:bg-white/10 rounded-xl border border-border-color flex items-center justify-center font-black active:scale-95 transition-all text-lg"
+                                                        title="Nudge Up 1mm"
+                                                    >
+                                                        ↑
+                                                    </button>
+                                                    <div></div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleNudge('x', -1)} 
+                                                        className="h-10 w-10 bg-card-bg hover:bg-black/10 dark:hover:bg-white/10 rounded-xl border border-border-color flex items-center justify-center font-black active:scale-95 transition-all text-lg"
+                                                        title="Nudge Left 1mm"
+                                                    >
+                                                        ←
+                                                    </button>
+                                                    <div className="flex items-center justify-center text-[10px] font-extrabold text-accent bg-accent/5 rounded-xl text-center select-none truncate">
+                                                        {selectedField.toUpperCase()}
+                                                    </div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleNudge('x', 1)} 
+                                                        className="h-10 w-10 bg-card-bg hover:bg-black/10 dark:hover:bg-white/10 rounded-xl border border-border-color flex items-center justify-center font-black active:scale-95 transition-all text-lg"
+                                                        title="Nudge Right 1mm"
+                                                    >
+                                                        →
+                                                    </button>
+                                                    <div></div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleNudge('y', 1)} 
+                                                        className="h-10 w-10 bg-card-bg hover:bg-black/10 dark:hover:bg-white/10 rounded-xl border border-border-color flex items-center justify-center font-black active:scale-95 transition-all text-lg"
+                                                        title="Nudge Down 1mm"
+                                                    >
+                                                        ↓
+                                                    </button>
+                                                    <div></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Request Detail Modal */}
             {selectedRequest && (

@@ -31,7 +31,7 @@ const Footer: React.FC = () => {
   return (
     <footer className="text-text-secondary">
       <div className="max-w-screen-xl mx-auto py-12 px-4 sm:px-6 lg:px-8 text-center">
-        <img src="https://ik.imagekit.io/dccc/clg-club.png" className="h-12 mx-auto mb-6" alt="DCCC Logo" />
+        <img src="https://ik.imagekit.io/dccc/dccc-logo.png" className="h-12 mx-auto mb-6" alt="DCCC Logo" />
         <p className="max-w-2xl mx-auto mb-8">
           {footerData.footer_about}
         </p>

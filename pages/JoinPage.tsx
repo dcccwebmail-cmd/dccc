@@ -7,6 +7,7 @@ import { submitJoinRequest } from '../services/joinService';
 import SectionWrapper from '../components/SectionWrapper';
 import { useToast } from '../contexts/ToastContext';
 import { useData } from '../contexts/DataContext';
+import { compressImageToWebP } from '../services/imageService';
 
 const steps = [
     { id: 1, label: 'রেজিস্ট্রেশন\nRegistration' },
@@ -31,39 +32,6 @@ const sections = [
 const booths = ['Booth A', 'Booth B', 'Booth C', 'Booth D'];
 
 const IMAGEKIT_PUBLIC_KEY = import.meta.env.VITE_IMAGEKIT_PUBLIC_KEY || '';
-
-const compressImage = async (file: File): Promise<File> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const maxWidth = 800;
-        const scaleSize = maxWidth / img.width;
-        canvas.width = maxWidth;
-        canvas.height = img.height * scaleSize;
-        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error('Canvas is empty'));
-            return;
-          }
-          const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now(),
-          });
-          resolve(compressedFile);
-        }, 'image/jpeg', 0.7);
-      };
-    };
-    reader.onerror = (error) => reject(error);
-  });
-};
 
 const JoinPage: React.FC = () => {
     const navigate = useNavigate();
@@ -240,7 +208,7 @@ const JoinPage: React.FC = () => {
         try {
             let imageUrl = '';
             if (formData.imageFile) {
-                const compressedFile = await compressImage(formData.imageFile);
+                const compressedFile = await compressImageToWebP(formData.imageFile, 800, 0.8);
                 
                 // Get auth details from backend
                 const authRes = await fetch('/api/imagekit/auth');
@@ -250,7 +218,7 @@ const JoinPage: React.FC = () => {
                 const uploadData = new FormData();
                 uploadData.append('file', compressedFile);
                 const safeName = formData.name_en.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                const fileName = `${safeName}_${formData.roll || 'join'}.jpg`;
+                const fileName = `${safeName}_${formData.roll || 'join'}.webp`;
                 
                 uploadData.append('fileName', fileName);
                 uploadData.append('folder', '/join_requests');

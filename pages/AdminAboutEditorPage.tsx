@@ -3,6 +3,7 @@ import AdminLayout from '../components/admin/AdminLayout';
 import { useData } from '../contexts/DataContext';
 import { AboutData, AboutSection } from '../types';
 import FormInput from '../components/admin/FormInput';
+import ImageInput from '../components/admin/ImageInput';
 import { useToast } from '../contexts/ToastContext';
 
 interface AdminAboutEditorPageProps {
@@ -108,7 +109,7 @@ const AdminAboutEditorPage: React.FC<AdminAboutEditorPageProps> = ({ onLogout })
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <FormInput label="Preview Title" name="preview_title" value={aboutData.preview_title || ''} onChange={handleChange} required error={errors.main.preview_title} />
             <FormInput label="Vision Tagline" name="vision_tagline" value={aboutData.vision_tagline} onChange={handleChange} required error={errors.main.vision_tagline} />
-            <FormInput label="Preview Image URL" name="preview_image_url" value={aboutData.preview_image_url} onChange={handleChange} required error={errors.main.preview_image_url} />
+            <ImageInput label="Preview Image URL" name="preview_image_url" value={aboutData.preview_image_url} onChange={handleChange} required error={errors.main.preview_image_url} />
             <div className="md:col-span-2">
               <FormInput label="About Short Description" name="about_short" value={aboutData.about_short} onChange={handleChange} type="textarea" required error={errors.main.about_short} />
             </div>
@@ -131,7 +132,7 @@ const AdminAboutEditorPage: React.FC<AdminAboutEditorPageProps> = ({ onLogout })
               <div key={index} className="border border-border-color p-4 rounded-md relative">
                 <button type="button" onClick={() => removeSection(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 font-bold">✕</button>
                 <FormInput label={`Section ${index + 1} Title`} name="title" value={section.title} onChange={(e) => handleSectionChange(index, e)} required error={errors.sections[index]?.title} />
-                <FormInput label={`Section ${index + 1} Image URL`} name="image_url" value={section.image_url} onChange={(e) => handleSectionChange(index, e)} required error={errors.sections[index]?.image_url} />
+                <ImageInput label={`Section ${index + 1} Image URL`} name="image_url" value={section.image_url} onChange={(e) => handleSectionChange(index, e)} required error={errors.sections[index]?.image_url} />
                 <FormInput label={`Section ${index + 1} Description`} name="description" value={section.description} onChange={(e) => handleSectionChange(index, e)} type="textarea" required error={errors.sections[index]?.description} />
               </div>
             ))}

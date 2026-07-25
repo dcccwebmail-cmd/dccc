@@ -52,7 +52,7 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = () => {
         <div className="absolute top-4 right-4">
             <ThemeToggle />
         </div>
-        <img src="https://dhakacollegeculturalclub.com/logo.png" className="h-12 mx-auto mb-6" alt="DCCC Logo" />
+        <img src="https://ik.imagekit.io/dccc/dccc-logo.png" className="h-12 mx-auto mb-6" alt="DCCC Logo" />
         <h1 className="text-2xl font-bold text-center text-text-primary mb-6">Admin Panel Login</h1>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">

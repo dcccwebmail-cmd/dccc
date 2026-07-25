@@ -11,7 +11,7 @@ const PageTransitionLoader: React.FC = () => {
       }`}
     >
       <img
-        src="https://dhakacollegeculturalclub.com/logo.png"
+        src="https://ik.imagekit.io/dccc/dccc-logo.png"
         alt="DCCC Loading..."
         className={`h-20 w-20 transition-opacity duration-300 ${isLoading ? 'animate-logo-pulse' : ''}`}
       />

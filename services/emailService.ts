@@ -92,7 +92,7 @@ const generateIdCardPdf = async (userData: JoinRequest, config: IdCardConfig): P
             else if (isItalic) doc.setFont(fontName, "italic");
             else doc.setFont(fontName, "normal");
 
-            doc.text(text, fieldConfig.x, fieldConfig.y, { align: fieldConfig.align || 'left' });
+            doc.text(text, fieldConfig.x, fieldConfig.y, { align: fieldConfig.align || 'left', baseline: 'top' });
             
             // Basic underline implementation (jsPDF doesn't support textDecoration natively in all versions)
             if (fieldConfig.textDecoration === 'underline') {
@@ -100,7 +100,9 @@ const generateIdCardPdf = async (userData: JoinRequest, config: IdCardConfig): P
                 let x = fieldConfig.x;
                 if (fieldConfig.align === 'center') x -= textWidth / 2;
                 if (fieldConfig.align === 'right') x -= textWidth;
-                doc.line(x, fieldConfig.y + 1, x + textWidth, fieldConfig.y + 1); // Draw line 1mm below text
+                // Since baseline is 'top', the text height is roughly fontSize in pt * 0.3527 mm
+                const textHeightMm = (fieldConfig.fontSize || 12) * 0.3527;
+                doc.line(x, fieldConfig.y + textHeightMm + 0.5, x + textWidth, fieldConfig.y + textHeightMm + 0.5); 
             }
         };
 

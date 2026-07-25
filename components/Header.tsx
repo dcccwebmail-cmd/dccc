@@ -76,7 +76,7 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between w-full py-2 px-3">
           {/* Left: Logo */}
           <Link to="/" className="flex-shrink-0 flex items-center" onClick={closeMenu}>
-            <img src="https://dhakacollegeculturalclub.com/logo.png" className="h-10" alt="DCCC Logo" />
+            <img src="https://ik.imagekit.io/dccc/dccc-logo.png" className="h-10" alt="DCCC Logo" />
           </Link>
           
           {/* Right: Menus */}
