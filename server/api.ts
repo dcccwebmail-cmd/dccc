@@ -68,6 +68,31 @@ apiApp.get('/imagekit/auth', (req, res) => {
   }
 });
 
+// Secure API Route to handle server-side ImageKit upload proxy
+apiApp.post('/imagekit/upload', async (req, res) => {
+  try {
+    const ik = getIkClient();
+    const { file, fileName, folder, useUniqueFileName } = req.body;
+    
+    if (!file || !fileName) {
+      return res.status(400).json({ error: "Missing required parameters: file, fileName." });
+    }
+
+    console.log(`Uploading file ${fileName} to folder ${folder || '/'} via secure server proxy...`);
+    const result = await ik.upload({
+      file,
+      fileName,
+      folder: folder || '/',
+      useUniqueFileName: useUniqueFileName !== undefined ? useUniqueFileName : true
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("ImageKit server-side upload error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // API Route to list media files
 apiApp.get('/imagekit/files', async (req, res) => {
   try {

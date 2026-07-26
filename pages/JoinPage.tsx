@@ -239,34 +239,36 @@ const JoinPage: React.FC = () => {
             if (formData.imageFile) {
                 const compressedFile = await compressImageToWebP(formData.imageFile, 800, 0.8);
                 
-                // Get auth details from backend
-                const authRes = await fetch('/api/imagekit/auth');
-                if (!authRes.ok) {
-                    const errData = await authRes.json().catch(() => ({}));
-                    throw new Error(errData.error || 'Failed to get upload authorization.');
-                }
-                const authData = await authRes.json();
+                // Convert file to base64
+                const fileToBase64 = (file: File | Blob): Promise<string> => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(file);
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = error => reject(error);
+                    });
+                };
+                const base64File = await fileToBase64(compressedFile);
 
-                const uploadData = new FormData();
-                uploadData.append('file', compressedFile);
                 const safeName = formData.name_en.replace(/[^a-z0-9]/gi, '_').toLowerCase();
                 const fileName = `${safeName}_${formData.roll || 'join'}.webp`;
-                
-                uploadData.append('fileName', fileName);
-                uploadData.append('folder', '/join_requests');
-                uploadData.append('publicKey', authData.publicKey || '');
-                uploadData.append('signature', authData.signature);
-                uploadData.append('expire', authData.expire.toString());
-                uploadData.append('token', authData.token);
-                uploadData.append('useUniqueFileName', 'true');
 
-                const res = await fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
+                const res = await fetch('/api/imagekit/upload', {
                     method: 'POST',
-                    body: uploadData,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        file: base64File,
+                        fileName: fileName,
+                        folder: '/join_requests',
+                        useUniqueFileName: true
+                    })
                 });
 
                 if (!res.ok) {
-                    throw new Error('Image upload failed.');
+                    const errorData = await res.json().catch(() => ({}));
+                    throw new Error(errorData.error || errorData.message || 'Image upload failed.');
                 }
                 const json = await res.json();
                 imageUrl = json.url;

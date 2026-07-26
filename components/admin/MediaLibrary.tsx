@@ -71,6 +71,15 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
         }
     };
 
+    const fileToBase64 = (file: File | Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = error => reject(error);
+        });
+    };
+
     const uploadProcessedFile = async (file: File) => {
         if (!file.type.startsWith('image/')) {
             showToast('Please upload an image file.', 'error');
@@ -80,26 +89,24 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
         setUploading(true);
         try {
             const compressedFile = await compressImageToWebP(file, 1200, 0.8);
-            const authData = await authenticator();
+            const base64File = await fileToBase64(compressedFile);
 
-            const uploadData = new FormData();
-            uploadData.append('file', compressedFile);
-            uploadData.append('fileName', compressedFile.name);
-            uploadData.append('folder', currentPath);
-            uploadData.append('publicKey', authData.publicKey || publicKey);
-            uploadData.append('signature', authData.signature);
-            uploadData.append('expire', authData.expire.toString());
-            uploadData.append('token', authData.token);
-            uploadData.append('useUniqueFileName', 'true');
-
-            const res = await fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
+            const res = await fetch('/api/imagekit/upload', {
                 method: 'POST',
-                body: uploadData,
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    file: base64File,
+                    fileName: compressedFile.name,
+                    folder: currentPath,
+                    useUniqueFileName: true
+                })
             });
 
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.message || 'Image upload failed.');
+                throw new Error(errorData.error || errorData.message || 'Image upload failed.');
             }
 
             const json = await res.json();
