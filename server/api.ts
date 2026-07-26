@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import ImageKit from 'imagekit';
+import { Resend } from 'resend';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -169,40 +170,33 @@ apiApp.post('/email/send', async (req, res) => {
       return res.status(400).json({ error: "Sender details are missing." });
     }
 
-    const payload = {
+    const resendClient = new Resend(apiKey);
+    const formattedAttachments = attachments?.map((att: any) => ({
+      filename: att.filename,
+      content: Buffer.from(att.content, 'base64')
+    }));
+
+    const sendPayload: any = {
       from: fromHeader,
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
-      attachments
     };
 
-    console.log(`Sending secure email via Resend to ${JSON.stringify(to)} with subject "${subject}"...`);
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const responseText = await response.text();
-    let resData: any = null;
-    try {
-      resData = JSON.parse(responseText);
-    } catch (e) {
-      console.warn("Failed to parse Resend response as JSON. Raw response:", responseText);
+    if (formattedAttachments && formattedAttachments.length > 0) {
+      sendPayload.attachments = formattedAttachments;
     }
 
-    if (!response.ok) {
-      const errMsg = resData?.message || resData?.error || responseText || `Resend Error: ${response.status} ${response.statusText}`;
-      console.error(`Resend API error response (Status ${response.status}):`, errMsg);
-      return res.status(response.status).json({ error: errMsg });
+    console.log(`Sending secure email via Resend to ${JSON.stringify(to)} with subject "${subject}" using SDK...`);
+
+    const { data, error } = await resendClient.emails.send(sendPayload);
+
+    if (error) {
+      console.error(`Resend SDK error:`, error);
+      return res.status(400).json({ error: (error as any).message || error });
     }
 
-    res.json(resData || { success: true });
+    res.json(data || { success: true });
   } catch (error: any) {
     console.error("Error in secure /email/send proxy:", error);
     res.status(500).json({ error: error.message });

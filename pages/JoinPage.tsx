@@ -321,7 +321,11 @@ const JoinPage: React.FC = () => {
                 servicePayload.assignedId = formData.dccc_id;
             }
 
-            const reqId = await submitJoinRequest(servicePayload);
+            const reqId = await submitJoinRequest(servicePayload, {
+                emailConfig: data?.join?.emailConfig,
+                resendConfig: data?.join?.resendConfig,
+                idCardConfig: data?.join?.idCardConfig,
+            });
 
             if (offlineSoldRecord && reqId) {
                 await markOfflineFormAsRegistered(offlineSoldRecord.id!, reqId);

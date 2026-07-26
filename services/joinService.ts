@@ -9,7 +9,14 @@ const GOOGLE_SHEET_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxrbMNL
 const COLLECTION = 'join_requests';
 const METADATA_DOC = 'globals/metadata'; // Store counters here
 
-export const submitJoinRequest = async (data: Omit<JoinRequest, 'id' | 'status' | 'submitted_at'> & { status?: 'pending' | 'approved' }) => {
+export const submitJoinRequest = async (
+  data: Omit<JoinRequest, 'id' | 'status' | 'submitted_at'> & { status?: 'pending' | 'approved' },
+  configs?: {
+    emailConfig?: EmailConfig;
+    resendConfig?: ResendConfig;
+    idCardConfig?: IdCardConfig;
+  }
+) => {
   if (!db) throw new Error("Database not initialized");
   
   const status = data.status || 'pending';
@@ -27,6 +34,37 @@ export const submitJoinRequest = async (data: Omit<JoinRequest, 'id' | 'status' 
   }
 
   const docRef = await db.collection(COLLECTION).add(payload);
+
+  // Send Email via Resend if Approved immediately (e.g. offline form auto-approval)
+  if (status === 'approved' && configs?.resendConfig) {
+      try {
+          const emailResponse = await sendResendEmail({
+              resendConfig: configs.resendConfig,
+              to: { name: data.personal.name_en, email: data.personal.email },
+              subject: configs.emailConfig?.subject || "Welcome to DCCC",
+              htmlContent: configs.emailConfig?.body || "Your membership is approved.",
+              userData: { id: docRef.id, ...data, status, submitted_at: payload.submitted_at, assignedId } as any,
+              idCardConfig: configs.idCardConfig
+          });
+          console.log("Auto-approved offline form Resend email sent successfully, ID:", emailResponse?.id);
+          
+          if (emailResponse?.id) {
+              await db.collection(COLLECTION).doc(docRef.id).update({
+                  emailId: emailResponse.id,
+                  emailStatus: 'sent'
+              });
+          }
+      } catch (emailError) {
+          console.error("Failed to send Resend email for auto-approved offline form:", emailError);
+          try {
+              await db.collection(COLLECTION).doc(docRef.id).update({
+                  emailStatus: 'failed'
+              });
+          } catch (dbErr) {
+              console.error("Failed to update email status on failure:", dbErr);
+          }
+      }
+  }
 
   // 2. Send to Google Sheets (Secondary/Backup)
   if (GOOGLE_SHEET_SCRIPT_URL) {
