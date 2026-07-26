@@ -6,7 +6,8 @@ import FormInput from '../components/admin/FormInput';
 import ImageInput from '../components/admin/ImageInput';
 import AdminEditModal from '../components/admin/AdminEditModal';
 import { JoinContent, PaymentMethod, IdCardConfig } from '../types';
-import { Sliders, RefreshCw, Layers, Settings, FileText, CheckCircle, Trash2, X, Plus } from 'lucide-react';
+import { auth } from '../services/firebase';
+import { Sliders, RefreshCw, Layers, Settings, FileText, CheckCircle, Trash2, X, Plus, Mail, Send, AlertTriangle } from 'lucide-react';
 
 const ALL_AVAILABLE_FIELDS = ['name', 'name_bn', 'id', 'roll', 'section', 'session', 'phone', 'blood_group', 'photo'];
 
@@ -139,6 +140,100 @@ const JoinAdminSettings: React.FC = () => {
     const updateJoinContent = (updates: Partial<JoinContent>) => {
         if (!joinContent) return;
         setJoinContent({ ...joinContent, ...updates });
+    };
+
+    // Test Email System State
+    const [testRecipient, setTestRecipient] = useState('');
+    const [isSendingTest, setIsSendingTest] = useState(false);
+    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    // Default test recipient setup
+    useEffect(() => {
+        if (auth?.currentUser?.email) {
+            setTestRecipient(auth.currentUser.email);
+        } else {
+            setTestRecipient('dccc.webmail@gmail.com');
+        }
+    }, [settingsTab]);
+
+    const handleSendTestEmail = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!testRecipient.trim()) {
+            showToast("Please enter a recipient email.", "error");
+            return;
+        }
+
+        const apiKey = joinContent?.resendConfig?.apiKey;
+        const senderEmail = joinContent?.resendConfig?.senderEmail;
+        const senderName = joinContent?.resendConfig?.senderName;
+
+        if (!senderEmail) {
+            showToast("Please fill out the Sender Email first.", "error");
+            return;
+        }
+
+        setIsSendingTest(true);
+        setTestResult(null);
+
+        try {
+            const fromHeader = senderName ? `${senderName} <${senderEmail}>` : senderEmail;
+            
+            console.log("Sending test email to:", testRecipient, "from:", fromHeader);
+            const response = await fetch('/api/email/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    to: testRecipient,
+                    from: fromHeader,
+                    subject: "DCCC Resend Email System Test Connection",
+                    html: `
+                        <div style="font-family: sans-serif; padding: 24px; color: #1e293b; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <img src="https://ik.imagekit.io/dccc/dccc-logo.png" alt="DCCC Logo" style="height: 60px; width: auto;" />
+                            </div>
+                            <h2 style="color: #3b82f6; margin-top: 0; text-align: center; font-size: 22px; font-weight: 800;">Connection Successful! 🎉</h2>
+                            <p style="font-size: 15px; line-height: 1.6; color: #475569;">Hello,</p>
+                            <p style="font-size: 15px; line-height: 1.6; color: #475569;">This is a successful automated test email from your <strong>Dhaka College Cultural Club (DCCC)</strong> Admin Panel.</p>
+                            <p style="font-size: 15px; line-height: 1.6; color: #475569;">If you are reading this message, it means your Resend API integration, sender address setup, and backend routing are <strong>working perfectly!</strong></p>
+                            
+                            <div style="background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1;">
+                                <strong>Configuration Details:</strong><br/>
+                                • Sender Address: ${fromHeader}<br/>
+                                • Recipient: ${testRecipient}<br/>
+                                • API Key Source: ${apiKey ? "Manually Entered / Form State" : "Vercel Environment Variable (Server)"}
+                            </div>
+                            
+                            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                            <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 0;">Dhaka College Cultural Club • Membership Control Center</p>
+                        </div>
+                    `,
+                    resendApiKey: apiKey || undefined
+                })
+            });
+
+            const responseData = await response.json();
+
+            if (response.ok) {
+                setTestResult({
+                    success: true,
+                    message: `Test email sent successfully! Message ID: ${responseData.id || 'N/A'}`
+                });
+                showToast("Test email sent!", "success");
+            } else {
+                throw new Error(responseData.error || "Failed to send email via API.");
+            }
+        } catch (error: any) {
+            console.error("Test email sending failed:", error);
+            setTestResult({
+                success: false,
+                message: error.message || "Unknown error occurred."
+            });
+            showToast("Test email failed.", "error");
+        } finally {
+            setIsSendingTest(false);
+        }
     };
 
     const handleContentSubmit = async (e: React.FormEvent) => {
@@ -539,7 +634,7 @@ const JoinAdminSettings: React.FC = () => {
                     )}
 
                     {settingsTab === 'email' && (
-                        <div className="p-6 md:p-8 overflow-y-auto h-full">
+                        <div className="p-6 md:p-8 overflow-y-auto h-full space-y-8">
                             <form onSubmit={handleContentSubmit} className="space-y-6 max-w-3xl">
                                 <div>
                                     <h2 className="text-xl font-extrabold text-accent">Email System Configuration (Resend)</h2>
@@ -563,6 +658,79 @@ const JoinAdminSettings: React.FC = () => {
                                     <button type="submit" disabled={isSavingContent} className="px-6 py-3 bg-accent text-accent-text font-bold rounded-xl shadow-md hover:bg-accent-hover transition-colors">{isSavingContent ? 'Saving...' : 'Save Email Configuration'}</button>
                                 </div>
                             </form>
+
+                            {/* Connection Test Section */}
+                            <div className="border-t border-border-color pt-8 max-w-3xl">
+                                <div className="bg-slate-50 dark:bg-slate-900/40 rounded-xl p-5 border border-border-color shadow-sm space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-accent/10 rounded-lg text-accent">
+                                            <Mail className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-extrabold text-base text-text-primary">Test Email Connection</h3>
+                                            <p className="text-xs text-text-secondary">Verify your credentials and mail server by sending an instant test message.</p>
+                                        </div>
+                                    </div>
+
+                                    <form onSubmit={handleSendTestEmail} className="flex flex-col sm:flex-row items-end gap-3">
+                                        <div className="flex-grow w-full">
+                                            <FormInput 
+                                                label="Recipient Test Email" 
+                                                name="testRecipient" 
+                                                value={testRecipient} 
+                                                onChange={(e) => setTestRecipient(e.target.value)} 
+                                                placeholder="e.g. you@example.com"
+                                            />
+                                        </div>
+                                        <button 
+                                            type="submit" 
+                                            disabled={isSendingTest}
+                                            className="px-5 py-3 w-full sm:w-auto bg-accent text-accent-text font-bold rounded-xl hover:bg-accent-hover shadow-sm transition-all flex items-center justify-center gap-2 flex-shrink-0 disabled:opacity-50"
+                                        >
+                                            {isSendingTest ? (
+                                                <>
+                                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                                    Sending...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Send className="w-4 h-4" />
+                                                    Send Test Email
+                                                </>
+                                            )}
+                                        </button>
+                                    </form>
+
+                                    {testResult && (
+                                        <div className={`mt-4 p-4 rounded-xl border text-sm flex items-start gap-3 ${
+                                            testResult.success 
+                                                ? 'bg-green-500/10 border-green-500/20 text-green-700 dark:text-green-400' 
+                                                : 'bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-400'
+                                        }`}>
+                                            {testResult.success ? (
+                                                <CheckCircle className="w-5 h-5 flex-shrink-0 text-green-500 mt-0.5" />
+                                            ) : (
+                                                <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" />
+                                            )}
+                                            <div className="space-y-1 overflow-hidden">
+                                                <strong className="block font-bold">{testResult.success ? 'Success!' : 'Connection Failed'}</strong>
+                                                <p className="font-mono text-xs break-all whitespace-pre-wrap leading-relaxed">{testResult.message}</p>
+                                                {!testResult.success && (
+                                                    <div className="mt-2 text-xs opacity-90 leading-relaxed border-t border-red-500/10 pt-2 space-y-1 text-left">
+                                                        <span className="font-semibold block text-red-800 dark:text-red-300">Troubleshooting Steps:</span>
+                                                        <ul className="list-disc list-inside space-y-0.5 pl-1">
+                                                            <li>Verify that the <strong>Resend API Key</strong> is correct and active.</li>
+                                                            <li>Ensure the <strong>Sender Email</strong> domain is verified in your Resend account.</li>
+                                                            <li>Check if you are sending to a verified recipient if using a sandbox key.</li>
+                                                            <li>If configuring via <strong>Vercel Env Variables</strong>, make sure to trigger a <strong>redeploy</strong> after setting them.</li>
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     )}
 
