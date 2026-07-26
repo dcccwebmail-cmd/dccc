@@ -12,8 +12,8 @@ const authenticator = async () => {
             throw new Error(`Request failed with status ${response.status}: ${errorText}`);
         }
         const data = await response.json();
-        const { signature, expire, token } = data;
-        return { signature, expire, token };
+        const { signature, expire, token, publicKey } = data;
+        return { signature, expire, token, publicKey };
     } catch (error: any) {
         throw new Error(`Authentication request failed: ${error.message}`);
     }
@@ -86,7 +86,7 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
             uploadData.append('file', compressedFile);
             uploadData.append('fileName', compressedFile.name);
             uploadData.append('folder', currentPath);
-            uploadData.append('publicKey', publicKey);
+            uploadData.append('publicKey', authData.publicKey || publicKey);
             uploadData.append('signature', authData.signature);
             uploadData.append('expire', authData.expire.toString());
             uploadData.append('token', authData.token);
