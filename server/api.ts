@@ -1,22 +1,24 @@
 import express from 'express';
 import cors from 'cors';
 import ImageKit from 'imagekit';
-import admin from 'firebase-admin';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const apiApp = express.Router();
 
 apiApp.use(cors());
-apiApp.use(express.json());
+apiApp.use(express.json({ limit: '10mb' }));
+apiApp.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Initialize Firebase Admin SDK
 let adminDb: any = null;
 try {
-  if (!admin.apps.length) {
-    admin.initializeApp({
+  if (getApps().length === 0) {
+    initializeApp({
       projectId: process.env.FIREBASE_PROJECT_ID || 'dccc-v3'
     });
   }
-  adminDb = admin.firestore();
+  adminDb = getFirestore();
   console.log("Firebase Admin initialized successfully.");
 } catch (err) {
   console.error("Firebase Admin initialization failed:", err);
@@ -186,12 +188,21 @@ apiApp.post('/email/send', async (req, res) => {
       body: JSON.stringify(payload)
     });
 
-    const resData: any = await response.json();
-    if (!response.ok) {
-      throw new Error(resData?.message || `Resend Error: ${response.statusText}`);
+    const responseText = await response.text();
+    let resData: any = null;
+    try {
+      resData = JSON.parse(responseText);
+    } catch (e) {
+      console.warn("Failed to parse Resend response as JSON. Raw response:", responseText);
     }
 
-    res.json(resData);
+    if (!response.ok) {
+      const errMsg = resData?.message || resData?.error || responseText || `Resend Error: ${response.status} ${response.statusText}`;
+      console.error(`Resend API error response (Status ${response.status}):`, errMsg);
+      return res.status(response.status).json({ error: errMsg });
+    }
+
+    res.json(resData || { success: true });
   } catch (error: any) {
     console.error("Error in secure /email/send proxy:", error);
     res.status(500).json({ error: error.message });

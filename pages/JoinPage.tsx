@@ -20,7 +20,6 @@ const steps = [
 ];
 
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const genders = ['পুরুষ (Male)', 'মহিলা (Female)', 'অন্যান্য (Other)'];
 const departmentsList = [
     'Wordspace', 'Musica', 'Artstation', 'Timbre', 
     'Film School & Photography', 'Human Resource Management', 
@@ -55,7 +54,6 @@ const JoinPage: React.FC = () => {
         booth: '',
         father_name: '',
         mother_name: '',
-        gender: '', // Fixed: Changed default from 'পুরুষ (Male)' to empty string to force selection
         section: '',
         roll: '',
         prev_institute: '',
@@ -526,7 +524,7 @@ const JoinPage: React.FC = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         {/* Date Input with UX Improvements */}
                                         <div className="mb-4 relative">
-                                            <label className="block text-sm font-medium text-text-secondary mb-2">জন্ম তারিখ (Date of Birth) *</label>
+                                            <label className="block text-sm font-medium text-text-secondary mb-2">জন্ম তারিখ (Date of Birth) <span className="text-red-500">*</span></label>
                                             <input 
                                                 type="date" 
                                                 name="dob"
@@ -552,11 +550,7 @@ const JoinPage: React.FC = () => {
                                         <FormInput label="পিতার নাম (Father's Name)" name="father_name" value={formData.father_name} onChange={handleChange} required />
                                         <FormInput label="মাতার নাম (Mother's Name)" name="mother_name" value={formData.mother_name} onChange={handleChange} required />
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <FormInput label="লিঙ্গ (Gender)" name="gender" type="select" value={formData.gender} onChange={handleChange} required>
-                                            <option value="">Select Gender...</option>
-                                            {genders.map(g => <option key={g} value={g}>{g}</option>)}
-                                        </FormInput>
+                                    <div className="grid grid-cols-1 gap-6">
                                         <FormInput label="ইমেইল (Email)" name="email" type="email" value={formData.email} onChange={handleChange} required />
                                     </div>
                                 </div>

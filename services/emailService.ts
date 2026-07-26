@@ -126,7 +126,8 @@ export const generateIdCardPdf = async (userData: JoinRequest, config: IdCardCon
     }
 
     if (download) {
-        doc.save(`DCCC_ID_${userData.personal.name_en.replace(/\s/g, '_')}.pdf`);
+        const safeName = (userData?.personal?.name_en || 'Member').replace(/\s/g, '_');
+        doc.save(`DCCC_ID_${safeName}.pdf`);
     }
 
     // Return pure base64 string (without data:application/pdf;base64, prefix)
@@ -142,10 +143,11 @@ export const sendResendEmail = async ({ resendConfig, to, subject, htmlContent, 
     if (idCardConfig) {
         try {
             const pdfBase64 = await generateIdCardPdf(userData, idCardConfig);
+            const safeName = (userData?.personal?.name_en || 'Member').replace(/\s/g, '_');
             attachments = [
                 {
                     content: pdfBase64,
-                    filename: `DCCC_ID_${userData.personal.name_en.replace(/\s/g, '_')}.pdf`
+                    filename: `DCCC_ID_${safeName}.pdf`
                 }
             ];
         } catch (e) {

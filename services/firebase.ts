@@ -249,7 +249,22 @@ export const initialData: DCCCData = {
       }
     ],
     supportWhatsapp: "https://wa.me/8801XXXXXXXXX",
-    supportFacebook: "https://m.me/dccc"
+    supportFacebook: "https://m.me/dccc",
+    idCardConfig: {
+      backgroundImageUrl: "https://i.imgur.com/rO9yC9G.png",
+      width: 85,
+      height: 55,
+      fields: {
+        name: { x: 42, y: 12, fontSize: 10, color: "#000000", align: "center", fontWeight: "bold" },
+        name_bn: { x: 42, y: 18, fontSize: 8, color: "#475569", align: "center" },
+        id: { x: 42, y: 25, fontSize: 8, color: "#3b82f6", align: "center", fontWeight: "bold" },
+        roll: { x: 25, y: 32, fontSize: 8, color: "#000000", align: "left" },
+        section: { x: 60, y: 32, fontSize: 8, color: "#000000", align: "left" },
+        session: { x: 25, y: 38, fontSize: 8, color: "#000000", align: "left" },
+        blood_group: { x: 60, y: 38, fontSize: 8, color: "#000000", align: "left" },
+        phone: { x: 42, y: 45, fontSize: 8, color: "#000000", align: "center" }
+      }
+    }
   }
 };
 

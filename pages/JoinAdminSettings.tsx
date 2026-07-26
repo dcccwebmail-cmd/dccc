@@ -146,7 +146,9 @@ const JoinAdminSettings: React.FC = () => {
         if (joinContent) {
             setIsSavingContent(true);
             try {
-                await updateData({ join: joinContent });
+                // Sanitize content to remove deleted fields (e.g. photo) before saving
+                const sanitizedContent = JSON.parse(JSON.stringify(joinContent));
+                await updateData({ join: sanitizedContent });
                 showToast('Settings saved successfully!', 'success');
             } catch (error) {
                 console.error("Error saving settings:", error);
@@ -686,7 +688,9 @@ const JoinAdminSettings: React.FC = () => {
                                 onClick={async () => {
                                     setIsSavingContent(true);
                                     try {
-                                        await updateData({ join: joinContent });
+                                        // Sanitize content to remove deleted fields (e.g. photo) before saving
+                                        const sanitizedContent = JSON.parse(JSON.stringify(joinContent));
+                                        await updateData({ join: sanitizedContent });
                                         showToast('ID Card design saved and applied successfully!', 'success');
                                         setIsDesignerOpen(false);
                                         setSelectedField(null);

@@ -84,7 +84,7 @@ export const saveGlobal = async (docId: string, data: object): Promise<void> => 
     if (!db) {
         throw new Error("Firebase not initialized. Cannot save data.");
     }
-    await db.collection(GLOBALS_COLLECTION).doc(docId).set(data, { merge: true });
+    await db.collection(GLOBALS_COLLECTION).doc(docId).set(data);
 };
 
 // Function to overwrite an entire collection. It now has special logic for 'panels'.
