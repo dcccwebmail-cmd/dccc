@@ -10,4 +10,12 @@ const app = express();
 app.use('/api', apiApp);
 app.use('/', apiApp);
 
+// Catch any serverless level error and guarantee JSON response
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("Serverless Entry Global Error:", err);
+  res.status(err.status || 500).json({
+    error: err.message || "A serverless function error occurred."
+  });
+});
+
 export default app;

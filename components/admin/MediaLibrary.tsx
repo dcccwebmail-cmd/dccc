@@ -7,12 +7,22 @@ import { compressImageToWebP } from '../../services/imageService';
 const authenticator = async () => {
     try {
         const response = await fetch('/api/imagekit/auth');
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Request failed with status ${response.status}: ${errorText}`);
+        let data: any = {};
+        try {
+            data = await response.json();
+        } catch (parseError) {
+            const rawText = await response.text().catch(() => '');
+            throw new Error(`Server returned status ${response.status}: ${rawText || 'Non-JSON response'}`);
         }
-        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || data.message || `Authentication request failed with status ${response.status}`);
+        }
+
         const { signature, expire, token, publicKey } = data;
+        if (!signature || !expire || !token) {
+            throw new Error(`Missing authentication parameters in response: ${JSON.stringify(data)}`);
+        }
         return { signature, expire, token, publicKey };
     } catch (error: any) {
         throw new Error(`Authentication request failed: ${error.message}`);

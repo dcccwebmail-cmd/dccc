@@ -8,8 +8,8 @@ import { getFirestore } from 'firebase-admin/firestore';
 const apiApp = express.Router();
 
 apiApp.use(cors());
-apiApp.use(express.json({ limit: '10mb' }));
-apiApp.use(express.urlencoded({ limit: '10mb', extended: true }));
+apiApp.use(express.json({ limit: '50mb' }));
+apiApp.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize Firebase Admin SDK
 let adminDb: any = null;
@@ -25,43 +25,40 @@ try {
   console.error("Firebase Admin initialization failed:", err);
 }
 
-// ImageKit initialization
-let imagekit: ImageKit | null = null;
-const getIkClient = () => {
-  if (!imagekit) {
-    const urlEndpoint = process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT;
-    const publicKey = process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY;
-    const privateKey = process.env.IMAGEKIT_PRIVATE_KEY || process.env.VITE_IMAGEKIT_PRIVATE_KEY;
+// ImageKit initialization helper with support for custom configs and credential trimming
+const getIkClient = (customConfig?: { urlEndpoint?: string; publicKey?: string; privateKey?: string }) => {
+  const urlEndpoint = (customConfig?.urlEndpoint || process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '').trim();
+  const publicKey = (customConfig?.publicKey || process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim();
+  const privateKey = (customConfig?.privateKey || process.env.IMAGEKIT_PRIVATE_KEY || process.env.VITE_IMAGEKIT_PRIVATE_KEY || '').trim();
 
-    if (!urlEndpoint || !publicKey || !privateKey) {
-      throw new Error(`ImageKit environment variables are missing. Required: urlEndpoint, publicKey, privateKey. Received: endpoint=${!!urlEndpoint}, public=${!!publicKey}, private=${!!privateKey}`);
-    }
-    imagekit = new ImageKit({
-      urlEndpoint,
-      publicKey,
-      privateKey
-    });
+  if (!urlEndpoint || !publicKey || !privateKey) {
+    throw new Error(`ImageKit environment variables or credentials are missing. Required: urlEndpoint, publicKey, privateKey. Found: endpoint=${!!urlEndpoint}, public=${!!publicKey}, private=${!!privateKey}`);
   }
-  return imagekit;
+
+  return new ImageKit({
+    urlEndpoint,
+    publicKey,
+    privateKey
+  });
 };
 
 // API Route to fetch public configuration for ImageKit
 apiApp.get('/imagekit/config', (req, res) => {
   res.json({
-    urlEndpoint: process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '',
-    publicKey: process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || ''
+    urlEndpoint: (process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '').trim(),
+    publicKey: (process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim()
   });
 });
 
 // API Route to fetch auth parameters for client-side upload
-apiApp.get('/imagekit/auth', (req, res) => {
+apiApp.get('/imagekit/auth', (req, res, next) => {
   try {
     const ik = getIkClient();
     const authenticationParameters = ik.getAuthenticationParameters();
     // Return publicKey along with signature, expire, token
     res.json({
         ...authenticationParameters,
-        publicKey: process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || ''
+        publicKey: (process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim()
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -69,10 +66,10 @@ apiApp.get('/imagekit/auth', (req, res) => {
 });
 
 // Secure API Route to handle server-side ImageKit upload proxy
-apiApp.post('/imagekit/upload', async (req, res) => {
+apiApp.post('/imagekit/upload', async (req, res, next) => {
   try {
-    const ik = getIkClient();
-    const { file, fileName, folder, useUniqueFileName } = req.body;
+    const { file, fileName, folder, useUniqueFileName, imagekitConfig } = req.body;
+    const ik = getIkClient(imagekitConfig);
     
     if (!file || !fileName) {
       return res.status(400).json({ error: "Missing required parameters: file, fileName." });
@@ -94,7 +91,7 @@ apiApp.post('/imagekit/upload', async (req, res) => {
 });
 
 // API Route to list media files
-apiApp.get('/imagekit/files', async (req, res) => {
+apiApp.get('/imagekit/files', async (req, res, next) => {
   try {
     const ik = getIkClient();
     const pathParam = req.query.path as string | undefined;
@@ -111,7 +108,7 @@ apiApp.get('/imagekit/files', async (req, res) => {
 });
 
 // API Route to list all unique folders (virtual + actual)
-apiApp.get('/imagekit/folders', async (req, res) => {
+apiApp.get('/imagekit/folders', async (req, res, next) => {
   try {
     const ik = getIkClient();
     const result = await ik.listFiles({ skip: 0, limit: 1000 });
@@ -144,7 +141,7 @@ apiApp.get('/imagekit/folders', async (req, res) => {
 });
 
 // API Route to create folder
-apiApp.post('/imagekit/folder', async (req, res) => {
+apiApp.post('/imagekit/folder', async (req, res, next) => {
   try {
      const ik = getIkClient();
      const { folderName, parentFolderPath } = req.body;
@@ -157,7 +154,7 @@ apiApp.post('/imagekit/folder', async (req, res) => {
 });
 
 // API Route to rename a media file (Note: imagekit SDK syntax)
-apiApp.put('/imagekit/files/:fileId/rename', async (req, res) => {
+apiApp.put('/imagekit/files/:fileId/rename', async (req, res, next) => {
   try {
     const ik = getIkClient();
     const { filePath, newFileName } = req.body;
@@ -169,7 +166,7 @@ apiApp.put('/imagekit/files/:fileId/rename', async (req, res) => {
 });
 
 // API Route to delete a media file
-apiApp.delete('/imagekit/files/:fileId', async (req, res) => {
+apiApp.delete('/imagekit/files/:fileId', async (req, res, next) => {
   try {
     const ik = getIkClient();
     const { fileId } = req.params;
@@ -181,13 +178,13 @@ apiApp.delete('/imagekit/files/:fileId', async (req, res) => {
 });
 
 // Secure Proxy for Resend Email Sending
-apiApp.post('/email/send', async (req, res) => {
+apiApp.post('/email/send', async (req, res, next) => {
   try {
     const { to, subject, html, attachments, resendApiKey } = req.body;
     
-    const apiKey = process.env.RESEND_API_KEY || resendApiKey;
+    const apiKey = (process.env.RESEND_API_KEY || resendApiKey || '').trim();
     if (!apiKey) {
-      return res.status(400).json({ error: "Resend API Key is missing. Please configure RESEND_API_KEY on the server or provide it in settings." });
+      return res.status(400).json({ error: "Resend API Key is missing. Please configure RESEND_API_KEY on the server or in Email System settings." });
     }
 
     const fromHeader = req.body.from;
@@ -218,18 +215,19 @@ apiApp.post('/email/send', async (req, res) => {
 
     if (error) {
       console.error(`Resend SDK error:`, error);
-      return res.status(400).json({ error: (error as any).message || error });
+      const errMsg = typeof error === 'string' ? error : ((error as any).message || (error as any).name || JSON.stringify(error));
+      return res.status(400).json({ error: errMsg });
     }
 
     res.json(data || { success: true });
   } catch (error: any) {
     console.error("Error in secure /email/send proxy:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || "An error occurred while processing email request." });
   }
 });
 
 // Resend Webhook endpoint for tracking email status
-apiApp.post('/webhooks/resend', async (req, res) => {
+apiApp.post('/webhooks/resend', async (req, res, next) => {
   try {
     const event = req.body;
     console.log("Received Resend Webhook:", JSON.stringify(event));
@@ -286,6 +284,20 @@ apiApp.post('/webhooks/resend', async (req, res) => {
     console.error("Error in /webhooks/resend listener:", error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Fallback for non-existent API routes (Ensure 404s return JSON, not HTML)
+apiApp.use((req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Global API Error Handler - ALWAYS returns JSON
+apiApp.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("Global API Error Handler caught error:", err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: err.message || "An unexpected server error occurred on the API route."
+  });
 });
 
 export default apiApp;

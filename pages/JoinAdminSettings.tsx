@@ -213,7 +213,13 @@ const JoinAdminSettings: React.FC = () => {
                 })
             });
 
-            const responseData = await response.json();
+            let responseData: any = {};
+            try {
+                responseData = await response.json();
+            } catch (err) {
+                const text = await response.text().catch(() => '');
+                throw new Error(`Server returned error status (${response.status} ${response.statusText}): ${text || 'Non-JSON response'}`);
+            }
 
             if (response.ok) {
                 setTestResult({
@@ -222,7 +228,7 @@ const JoinAdminSettings: React.FC = () => {
                 });
                 showToast("Test email sent!", "success");
             } else {
-                throw new Error(responseData.error || "Failed to send email via API.");
+                throw new Error(responseData.error || responseData.message || "Failed to send email via API.");
             }
         } catch (error: any) {
             console.error("Test email sending failed:", error);

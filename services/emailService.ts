@@ -185,16 +185,18 @@ export const sendResendEmail = async ({ resendConfig, to, subject, htmlContent, 
         body: JSON.stringify(payload)
     });
 
+    let responseData: any = {};
+    try {
+        responseData = await response.json();
+    } catch (parseError) {
+        const rawText = await response.text().catch(() => '');
+        throw new Error(`Server response error (${response.status} ${response.statusText}): ${rawText || 'Non-JSON response'}`);
+    }
+
     if (!response.ok) {
-        let errorMessage = "Resend API Error";
-        try {
-            const err = await response.json();
-            errorMessage = err.error || err.message || errorMessage;
-        } catch (jsonError) {
-            errorMessage = `Resend API Error: ${response.status} ${response.statusText}`;
-        }
+        const errorMessage = responseData.error || responseData.message || `Resend API Error: ${response.status} ${response.statusText}`;
         throw new Error(errorMessage);
     }
 
-    return response.json();
+    return responseData;
 };
