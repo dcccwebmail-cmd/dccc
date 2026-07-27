@@ -3,19 +3,27 @@ import apiApp from '../server/api';
 
 const app = express();
 
-// Mount the API router
-// On Vercel, the incoming request URL path can be '/api/imagekit/auth' or '/imagekit/auth'.
-// By mounting at both '/api' and '/', we ensure that all routes match correctly in both
-// Vercel Serverless Functions and local Express development environments.
-app.use('/api', apiApp);
-app.use('/', apiApp);
+// Path normalization for Vercel Serverless Function rewrites
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api/')) {
+    req.url = req.url.replace(/^\/api/, '');
+  } else if (req.url === '/api') {
+    req.url = '/';
+  }
+  next();
+});
 
-// Catch any serverless level error and guarantee JSON response
+// Mount router
+app.use(apiApp);
+
+// Catch-all serverless error handler ensuring clean JSON output
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error("Serverless Entry Global Error:", err);
-  res.status(err.status || 500).json({
-    error: err.message || "A serverless function error occurred."
-  });
+  if (!res.headersSent) {
+    res.status(err.status || err.statusCode || 500).json({
+      error: err.message || "A serverless function error occurred."
+    });
+  }
 });
 
 export default app;

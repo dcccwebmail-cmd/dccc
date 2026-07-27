@@ -1,28 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import ImageKit from 'imagekit';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 
 const apiApp = express.Router();
 
 apiApp.use(cors());
 apiApp.use(express.json({ limit: '50mb' }));
 apiApp.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// Initialize Firebase Admin SDK
-let adminDb: any = null;
-try {
-  if (getApps().length === 0) {
-    initializeApp({
-      projectId: process.env.FIREBASE_PROJECT_ID || 'dccc-v3'
-    });
-  }
-  adminDb = getFirestore();
-  console.log("Firebase Admin initialized successfully.");
-} catch (err) {
-  console.error("Firebase Admin initialization failed:", err);
-}
 
 // ImageKit initialization helper with support for custom configs, headers, query params, and credential cleaning
 const getIkClient = (reqOrConfig?: any) => {
@@ -47,29 +31,32 @@ const getIkClient = (reqOrConfig?: any) => {
     customConfig?.urlEndpoint || 
     process.env.VITE_IMAGEKIT_URL_ENDPOINT || 
     process.env.IMAGEKIT_URL_ENDPOINT || 
-    process.env.IMAGE_KIT_URL_ENDPOINT
+    process.env.IMAGE_KIT_URL_ENDPOINT ||
+    process.env.URL_ENDPOINT
   );
 
   const publicKey = clean(
     customConfig?.publicKey || 
     process.env.VITE_IMAGEKIT_PUBLIC_KEY || 
     process.env.IMAGEKIT_PUBLIC_KEY || 
-    process.env.IMAGE_KIT_PUBLIC_KEY
+    process.env.IMAGE_KIT_PUBLIC_KEY ||
+    process.env.PUBLIC_KEY
   );
 
   const privateKey = clean(
     customConfig?.privateKey || 
     process.env.IMAGEKIT_PRIVATE_KEY || 
     process.env.VITE_IMAGEKIT_PRIVATE_KEY || 
-    process.env.IMAGE_KIT_PRIVATE_KEY
+    process.env.IMAGE_KIT_PRIVATE_KEY ||
+    process.env.PRIVATE_KEY
   );
 
   if (!urlEndpoint || !publicKey || !privateKey) {
     const missing = [];
-    if (!urlEndpoint) missing.push('urlEndpoint (VITE_IMAGEKIT_URL_ENDPOINT / IMAGEKIT_URL_ENDPOINT)');
-    if (!publicKey) missing.push('publicKey (VITE_IMAGEKIT_PUBLIC_KEY / IMAGEKIT_PUBLIC_KEY)');
-    if (!privateKey) missing.push('privateKey (IMAGEKIT_PRIVATE_KEY)');
-    throw new Error(`ImageKit credentials missing on server: ${missing.join(', ')}. Please configure environment variables in your deployment settings.`);
+    if (!urlEndpoint) missing.push('VITE_IMAGEKIT_URL_ENDPOINT / IMAGEKIT_URL_ENDPOINT');
+    if (!publicKey) missing.push('VITE_IMAGEKIT_PUBLIC_KEY / IMAGEKIT_PUBLIC_KEY');
+    if (!privateKey) missing.push('IMAGEKIT_PRIVATE_KEY');
+    throw new Error(`Missing ImageKit variables on Vercel backend: ${missing.join(', ')}. Please add IMAGEKIT_PRIVATE_KEY, VITE_IMAGEKIT_PUBLIC_KEY, and VITE_IMAGEKIT_URL_ENDPOINT to Vercel Project Settings -> Environment Variables.`);
   }
 
   return new ImageKit({
