@@ -24,14 +24,52 @@ try {
   console.error("Firebase Admin initialization failed:", err);
 }
 
-// ImageKit initialization helper with support for custom configs and credential trimming
-const getIkClient = (customConfig?: { urlEndpoint?: string; publicKey?: string; privateKey?: string }) => {
-  const urlEndpoint = (customConfig?.urlEndpoint || process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '').trim();
-  const publicKey = (customConfig?.publicKey || process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim();
-  const privateKey = (customConfig?.privateKey || process.env.IMAGEKIT_PRIVATE_KEY || process.env.VITE_IMAGEKIT_PRIVATE_KEY || '').trim();
+// ImageKit initialization helper with support for custom configs, headers, query params, and credential cleaning
+const getIkClient = (reqOrConfig?: any) => {
+  let customConfig: any = {};
+
+  if (reqOrConfig && typeof reqOrConfig === 'object') {
+    if (reqOrConfig.headers || reqOrConfig.query || reqOrConfig.body) {
+      const req = reqOrConfig;
+      customConfig = {
+        urlEndpoint: req.headers?.['x-imagekit-url-endpoint'] || req.query?.urlEndpoint || req.body?.imagekitConfig?.urlEndpoint,
+        publicKey: req.headers?.['x-imagekit-public-key'] || req.query?.publicKey || req.body?.imagekitConfig?.publicKey,
+        privateKey: req.headers?.['x-imagekit-private-key'] || req.query?.privateKey || req.body?.imagekitConfig?.privateKey,
+      };
+    } else {
+      customConfig = reqOrConfig;
+    }
+  }
+
+  const clean = (val?: any) => typeof val === 'string' ? val.replace(/^["']|["']$/g, '').trim() : '';
+
+  const urlEndpoint = clean(
+    customConfig?.urlEndpoint || 
+    process.env.VITE_IMAGEKIT_URL_ENDPOINT || 
+    process.env.IMAGEKIT_URL_ENDPOINT || 
+    process.env.IMAGE_KIT_URL_ENDPOINT
+  );
+
+  const publicKey = clean(
+    customConfig?.publicKey || 
+    process.env.VITE_IMAGEKIT_PUBLIC_KEY || 
+    process.env.IMAGEKIT_PUBLIC_KEY || 
+    process.env.IMAGE_KIT_PUBLIC_KEY
+  );
+
+  const privateKey = clean(
+    customConfig?.privateKey || 
+    process.env.IMAGEKIT_PRIVATE_KEY || 
+    process.env.VITE_IMAGEKIT_PRIVATE_KEY || 
+    process.env.IMAGE_KIT_PRIVATE_KEY
+  );
 
   if (!urlEndpoint || !publicKey || !privateKey) {
-    throw new Error(`ImageKit environment variables or credentials are missing. Required: urlEndpoint, publicKey, privateKey. Found: endpoint=${!!urlEndpoint}, public=${!!publicKey}, private=${!!privateKey}`);
+    const missing = [];
+    if (!urlEndpoint) missing.push('urlEndpoint (VITE_IMAGEKIT_URL_ENDPOINT / IMAGEKIT_URL_ENDPOINT)');
+    if (!publicKey) missing.push('publicKey (VITE_IMAGEKIT_PUBLIC_KEY / IMAGEKIT_PUBLIC_KEY)');
+    if (!privateKey) missing.push('privateKey (IMAGEKIT_PRIVATE_KEY)');
+    throw new Error(`ImageKit credentials missing on server: ${missing.join(', ')}. Please configure environment variables in your deployment settings.`);
   }
 
   return new ImageKit({
@@ -43,20 +81,27 @@ const getIkClient = (customConfig?: { urlEndpoint?: string; publicKey?: string; 
 
 // API Route to fetch public configuration for ImageKit
 apiApp.get('/imagekit/config', (req, res) => {
-  res.json({
-    urlEndpoint: (process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || '').trim(),
-    publicKey: (process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim()
-  });
+  const urlEndpoint = (process.env.VITE_IMAGEKIT_URL_ENDPOINT || process.env.IMAGEKIT_URL_ENDPOINT || process.env.IMAGE_KIT_URL_ENDPOINT || '').trim();
+  const publicKey = (process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || process.env.IMAGE_KIT_PUBLIC_KEY || '').trim();
+  res.json({ urlEndpoint, publicKey });
 });
 
 // API Route to fetch auth parameters for client-side upload
 apiApp.get('/imagekit/auth', (req, res) => {
   try {
-    const ik = getIkClient();
+    const ik = getIkClient(req);
     const authenticationParameters = ik.getAuthenticationParameters();
+    const publicKey = (
+      req.headers['x-imagekit-public-key'] ||
+      process.env.VITE_IMAGEKIT_PUBLIC_KEY || 
+      process.env.IMAGEKIT_PUBLIC_KEY || 
+      process.env.IMAGE_KIT_PUBLIC_KEY || 
+      ''
+    ).toString().trim();
+
     res.json({
         ...authenticationParameters,
-        publicKey: (process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim()
+        publicKey
     });
   } catch (error: any) {
     console.error("ImageKit Auth Error:", error.message);
@@ -68,8 +113,8 @@ apiApp.get('/imagekit/auth', (req, res) => {
 apiApp.post('/imagekit/upload', async (req, res) => {
   try {
     const body = req.body || {};
-    const { file, fileName, folder, useUniqueFileName, imagekitConfig } = body;
-    const ik = getIkClient(imagekitConfig);
+    const { file, fileName, folder, useUniqueFileName } = body;
+    const ik = getIkClient(req);
     
     if (!file || !fileName) {
       return res.status(400).json({ error: "Missing required parameters: file, fileName." });
@@ -93,15 +138,19 @@ apiApp.post('/imagekit/upload', async (req, res) => {
 // API Route to list media files
 apiApp.get('/imagekit/files', async (req, res) => {
   try {
-    const ik = getIkClient();
+    const ik = getIkClient(req);
     const pathParam = req.query.path as string | undefined;
     const result = await ik.listFiles({
       skip: 0,
       limit: 1000,
       path: pathParam || undefined,
     });
-    // Return only actual files
-    res.json(result.filter((f: any) => f.type !== 'folder'));
+    
+    if (Array.isArray(result)) {
+      res.json(result.filter((f: any) => f.type !== 'folder'));
+    } else {
+      res.json([]);
+    }
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
@@ -110,30 +159,33 @@ apiApp.get('/imagekit/files', async (req, res) => {
 // API Route to list all unique folders (virtual + actual)
 apiApp.get('/imagekit/folders', async (req, res) => {
   try {
-    const ik = getIkClient();
+    const ik = getIkClient(req);
     const result = await ik.listFiles({ skip: 0, limit: 1000 });
     const folders = new Set<string>();
-    result.forEach((f: any) => {
-      // Direct folder items
-      if (f.type === 'folder' && f.filePath) {
-         folders.add(f.filePath);
-      }
-      
-      if (f.filePath) {
-         let current = f.filePath.substring(0, f.filePath.lastIndexOf('/'));
-         if (current === '') current = '/';
-         
-         if (current !== '/') {
-            while (current && current !== '/' && current !== '') {
-               folders.add(current);
-               const parts = current.split('/');
-               parts.pop();
-               current = parts.join('/');
-               if (current === '') current = '/';
-            }
-         }
-      }
-    });
+    
+    if (Array.isArray(result)) {
+      result.forEach((f: any) => {
+        // Direct folder items
+        if (f.type === 'folder' && f.filePath) {
+           folders.add(f.filePath);
+        }
+        
+        if (f.filePath) {
+           let current = f.filePath.substring(0, f.filePath.lastIndexOf('/'));
+           if (current === '') current = '/';
+           
+           if (current !== '/') {
+              while (current && current !== '/' && current !== '') {
+                 folders.add(current);
+                 const parts = current.split('/');
+                 parts.pop();
+                 current = parts.join('/');
+                 if (current === '') current = '/';
+              }
+           }
+        }
+      });
+    }
     res.json(Array.from(folders).sort());
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -143,7 +195,7 @@ apiApp.get('/imagekit/folders', async (req, res) => {
 // API Route to create folder
 apiApp.post('/imagekit/folder', async (req, res) => {
   try {
-     const ik = getIkClient();
+     const ik = getIkClient(req);
      const { folderName, parentFolderPath } = req.body || {};
      await ik.createFolder({ folderName, parentFolderPath });
      res.json({ success: true });
@@ -155,7 +207,7 @@ apiApp.post('/imagekit/folder', async (req, res) => {
 // API Route to rename a media file (Note: imagekit SDK syntax)
 apiApp.put('/imagekit/files/:fileId/rename', async (req, res) => {
   try {
-    const ik = getIkClient();
+    const ik = getIkClient(req);
     const { filePath, newFileName } = req.body || {};
     await ik.renameFile({ filePath, newFileName, purgeCache: true });
     res.json({ success: true });
@@ -167,7 +219,7 @@ apiApp.put('/imagekit/files/:fileId/rename', async (req, res) => {
 // API Route to delete a media file
 apiApp.delete('/imagekit/files/:fileId', async (req, res) => {
   try {
-    const ik = getIkClient();
+    const ik = getIkClient(req);
     const { fileId } = req.params;
     await ik.deleteFile(fileId);
     res.json({ success: true });

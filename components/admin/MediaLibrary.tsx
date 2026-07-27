@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { IKContext } from 'imagekitio-react';
-import { Trash2, Copy, Image as ImageIcon, Folder, Loader2, ChevronRight, Edit2, Check, X, FolderPlus } from 'lucide-react';
+import { Trash2, Copy, Image as ImageIcon, Folder, Loader2, ChevronRight, Edit2, Check, X, FolderPlus, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { compressImageToWebP } from '../../services/imageService';
+import ImageKitDiagnostic from './ImageKitDiagnostic';
 
 const authenticator = async () => {
     try {
@@ -54,7 +55,19 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
     const [currentPath, setCurrentPath] = useState<string>('/');
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     
+    // Helper to get ImageKit request headers
+    const getIkHeaders = (): Record<string, string> => {
+        const headers: Record<string, string> = {};
+        if (urlEndpoint) headers['x-imagekit-url-endpoint'] = urlEndpoint;
+        if (publicKey) headers['x-imagekit-public-key'] = publicKey;
+        if (import.meta.env.VITE_IMAGEKIT_PRIVATE_KEY) {
+            headers['x-imagekit-private-key'] = import.meta.env.VITE_IMAGEKIT_PRIVATE_KEY;
+        }
+        return headers;
+    };
+
     // Rename state
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
@@ -104,13 +117,15 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
             const res = await fetch('/api/imagekit/upload', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    ...getIkHeaders()
                 },
                 body: JSON.stringify({
                     file: base64File,
                     fileName: compressedFile.name,
                     folder: currentPath,
-                    useUniqueFileName: true
+                    useUniqueFileName: true,
+                    imagekitConfig: { urlEndpoint, publicKey }
                 })
             });
 
@@ -120,7 +135,7 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
                 try { errorData = JSON.parse(text); } catch {}
                 let errMsg = errorData.error || errorData.message || (text ? text.substring(0, 150) : 'Image upload failed.');
                 if (errMsg.includes('environment variables') || errMsg.includes('credentials') || errMsg.includes('missing')) {
-                    errMsg = 'ImageKit Setup Missing: Please configure VITE_IMAGEKIT_URL_ENDPOINT, VITE_IMAGEKIT_PUBLIC_KEY, and IMAGEKIT_PRIVATE_KEY in Vercel Environment Variables.';
+                    errMsg = 'ImageKit Setup Missing: Please configure VITE_IMAGEKIT_URL_ENDPOINT, VITE_IMAGEKIT_PUBLIC_KEY, and IMAGEKIT_PRIVATE_KEY in Environment Variables.';
                 }
                 throw new Error(errMsg);
             }
@@ -153,31 +168,48 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
     }, []);
 
     const fetchAllData = async () => {
-        if (!isConfigured) return;
+        if (!urlEndpoint && !publicKey) return;
         setLoading(true);
+        setFetchError(null);
         try {
-            // Fetch all files
-            const resFiles = await fetch('/api/imagekit/files');
-            // Fetch virtual folders
-            const resFolders = await fetch('/api/imagekit/folders');
+            const headers = getIkHeaders();
+            // Fetch all files & virtual folders
+            const resFiles = await fetch('/api/imagekit/files', { headers });
+            const resFolders = await fetch('/api/imagekit/folders', { headers });
             
+            let fileErrorMsg = '';
+
             if (resFiles.ok) {
                 const data = await resFiles.json();
-                setAllFiles(data.filter((f: any) => {
-                    let fp = '/';
-                    if (f.filePath) {
-                        fp = f.filePath.substring(0, f.filePath.lastIndexOf('/'));
-                        if (fp === '') fp = '/';
-                    }
-                    return !fp.startsWith('/join_requests');
-                }));
+                if (Array.isArray(data)) {
+                    setAllFiles(data.filter((f: any) => {
+                        let fp = '/';
+                        if (f.filePath) {
+                            fp = f.filePath.substring(0, f.filePath.lastIndexOf('/'));
+                            if (fp === '') fp = '/';
+                        }
+                        return !fp.startsWith('/join_requests');
+                    }));
+                }
+            } else {
+                const errData = await resFiles.json().catch(() => ({}));
+                fileErrorMsg = errData.error || errData.message || `Server returned status ${resFiles.status}`;
             }
+
             if (resFolders.ok) {
                 const folderData = await resFolders.json();
-                setFolders(folderData.filter((f: string) => !f.startsWith('/join_requests')));
+                if (Array.isArray(folderData)) {
+                    setFolders(folderData.filter((f: string) => !f.startsWith('/join_requests')));
+                }
             }
-        } catch (error) {
+
+            if (!resFiles.ok) {
+                setFetchError(fileErrorMsg || 'Failed to connect to ImageKit backend.');
+                showToast(`Failed to load media files: ${fileErrorMsg || resFiles.statusText}`, 'error');
+            }
+        } catch (error: any) {
             console.error('Failed to fetch media data', error);
+            setFetchError(error.message || 'Failed to fetch media data');
             showToast('Failed to load media data', 'error');
         } finally {
             setLoading(false);
@@ -185,8 +217,10 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
     };
 
     useEffect(() => {
-        fetchAllData();
-    }, [isConfigured]);
+        if (urlEndpoint || publicKey) {
+            fetchAllData();
+        }
+    }, [urlEndpoint, publicKey]);
 
     const onError = (err: any) => {
         console.error('Error during upload', err);
@@ -204,7 +238,10 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
         if (!confirm('Are you sure you want to delete this image?')) return;
         
         try {
-            const response = await fetch(`/api/imagekit/files/${fileId}`, { method: 'DELETE' });
+            const response = await fetch(`/api/imagekit/files/${fileId}`, { 
+                method: 'DELETE',
+                headers: getIkHeaders()
+            });
             if (response.ok) {
                 showToast('Image deleted successfully', 'success');
                 fetchAllData();
@@ -225,7 +262,7 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
         try {
             const response = await fetch(`/api/imagekit/files/${file.fileId}/rename`, { 
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getIkHeaders() },
                 body: JSON.stringify({ filePath: file.filePath, newFileName: editName })
             });
 
@@ -253,7 +290,7 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
         try {
             const response = await fetch(`/api/imagekit/folder`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getIkHeaders() },
                 body: JSON.stringify({ folderName: name, parentFolderPath: currentPath })
             });
             if (response.ok) {
@@ -301,15 +338,54 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
         return crumbs;
     };
 
+    const [showDiagnostic, setShowDiagnostic] = useState(false);
+
     if (!isConfigured) return (
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-md">
-            <strong>ImageKit Not Configured!</strong>
-            <p className="mt-1 text-sm">Please set VITE_IMAGEKIT_URL_ENDPOINT, VITE_IMAGEKIT_PUBLIC_KEY, and IMAGEKIT_PRIVATE_KEY in your environment variables.</p>
+        <div className="space-y-6">
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 p-4 rounded-xl flex items-center justify-between">
+                <div>
+                    <strong className="font-semibold block text-base">ImageKit Configuration Warning</strong>
+                    <p className="mt-1 text-sm">ImageKit variables are missing or incomplete. Use the diagnostic tool below to identify missing variables.</p>
+                </div>
+            </div>
+            <ImageKitDiagnostic />
         </div>
     );
 
     return (
         <IKContext urlEndpoint={urlEndpoint} publicKey={publicKey} authenticator={authenticator}>
+            {/* Diagnostic Toggle Toolbar */}
+            <div className="flex justify-end mb-4">
+                <button
+                    onClick={() => setShowDiagnostic(!showDiagnostic)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                >
+                    <Activity className="w-3.5 h-3.5 text-indigo-500" />
+                    {showDiagnostic ? 'Hide Diagnostics' : 'Run ImageKit Diagnostics'}
+                </button>
+            </div>
+
+            {/* Diagnostic Utility View */}
+            {(showDiagnostic || fetchError) && (
+                <ImageKitDiagnostic />
+            )}
+
+            {/* Connection Error Banner */}
+            {fetchError && (
+                <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 p-4 rounded-lg mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                    <div>
+                        <strong className="font-semibold block text-sm sm:text-base">ImageKit Server Connection Issue</strong>
+                        <p className="text-xs sm:text-sm mt-0.5">{fetchError}</p>
+                    </div>
+                    <button 
+                        onClick={fetchAllData}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-medium shrink-0 transition-colors cursor-pointer"
+                    >
+                        Retry Connection
+                    </button>
+                </div>
+            )}
+
             {/* Upload Area */}
             <div 
                 onDragEnter={handleDrag}
