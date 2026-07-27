@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { getJoinRequests, updateJoinRequestStatus, deleteJoinRequest } from '../services/joinService';
 import { useToast } from '../contexts/ToastContext';
 import { useData } from '../contexts/DataContext';
-import { generateIdCardPdf } from '../services/emailService';
+import { generateIdCardPdf, sendResendEmail } from '../services/emailService';
 import { JoinRequest } from '../types';
-import { FileText, RefreshCw, CheckCircle, Clock, Search, Trash2, Download } from 'lucide-react';
+import { FileText, RefreshCw, CheckCircle, Clock, Search, Trash2, Download, Mail } from 'lucide-react';
 
 const JoinAdminRequests: React.FC = () => {
     const [requests, setRequests] = useState<JoinRequest[]>([]);
@@ -12,6 +12,7 @@ const JoinAdminRequests: React.FC = () => {
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
     const [selectedRequest, setSelectedRequest] = useState<JoinRequest | null>(null);
     const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+    const [isSendingEmail, setIsSendingEmail] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     const { data } = useData();
@@ -86,6 +87,31 @@ const JoinAdminRequests: React.FC = () => {
             showToast('Failed to generate ID Card: ' + (e.message || 'Unknown error'), 'error');
         } finally {
             setIsGeneratingCard(false);
+        }
+    };
+
+    const handleResendEmail = async () => {
+        if (!selectedRequest) return;
+        setIsSendingEmail(true);
+        try {
+            const emailResponse = await sendResendEmail({
+                resendConfig: joinContent?.resendConfig || {},
+                to: { name: selectedRequest.personal.name_en, email: selectedRequest.personal.email },
+                subject: joinContent?.emailConfig?.subject || "Welcome to DCCC",
+                htmlContent: joinContent?.emailConfig?.body || "Your membership is approved.",
+                userData: selectedRequest,
+                idCardConfig: joinContent?.idCardConfig
+            });
+            showToast('Welcome email with attached ID Card sent successfully!', 'success');
+            fetchRequests();
+            if (selectedRequest.id && emailResponse?.id) {
+                setSelectedRequest(prev => prev ? { ...prev, emailId: emailResponse.id, emailStatus: 'sent' } : null);
+            }
+        } catch (e: any) {
+            console.error("Failed to resend email:", e);
+            showToast('Failed to send email: ' + (e.message || 'Unknown error'), 'error');
+        } finally {
+            setIsSendingEmail(false);
         }
     };
 
@@ -468,23 +494,42 @@ const JoinAdminRequests: React.FC = () => {
                         {/* Actions */}
                         <div className="mt-6 flex flex-wrap gap-3 justify-end border-t border-border-color pt-4 text-xs">
                             {selectedRequest.status === 'approved' && (
-                                <button 
-                                    onClick={handleDownloadIdCard} 
-                                    disabled={isGeneratingCard}
-                                    className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-accent-text font-bold rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
-                                >
-                                    {isGeneratingCard ? (
-                                        <>
-                                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                            Generating Card...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FileText className="w-3.5 h-3.5" />
-                                            Download ID Card
-                                        </>
-                                    )}
-                                </button>
+                                <>
+                                    <button 
+                                        onClick={handleDownloadIdCard}
+                                        disabled={isGeneratingCard}
+                                        className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-accent-text font-bold rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isGeneratingCard ? (
+                                            <>
+                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                                Generating Card...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FileText className="w-3.5 h-3.5" />
+                                                Download ID Card
+                                            </>
+                                        )}
+                                    </button>
+                                    <button 
+                                        onClick={handleResendEmail}
+                                        disabled={isSendingEmail}
+                                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isSendingEmail ? (
+                                            <>
+                                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Mail className="w-3.5 h-3.5" />
+                                                Send/Resend Email
+                                            </>
+                                        )}
+                                    </button>
+                                </>
                             )}
                             {selectedRequest.status === 'pending' && (
                                 <>

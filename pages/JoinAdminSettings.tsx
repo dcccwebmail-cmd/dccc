@@ -653,10 +653,20 @@ const JoinAdminSettings: React.FC = () => {
                                     <h2 className="text-xl font-extrabold text-accent">Email System Configuration (Resend)</h2>
                                     <p className="text-xs text-text-secondary mt-1">Provide Resend API key and sender details to send automatic member welcome emails with attached ID Cards.</p>
                                 </div>
-                                <FormInput label="Resend API Key" name="apiKey" value={joinContent.resendConfig?.apiKey || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, apiKey: e.target.value } as any })} type="password" />
+                                <div>
+                                    <FormInput 
+                                        label="Resend API Key" 
+                                        name="apiKey" 
+                                        value={joinContent.resendConfig?.apiKey || ''} 
+                                        onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, apiKey: e.target.value } as any })} 
+                                        type="password" 
+                                        placeholder="re_xxxxxxxxx"
+                                    />
+                                    <p className="text-[11px] text-text-secondary mt-1">Replace <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded text-accent">re_xxxxxxxxx</code> with your actual Resend API Key from <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="underline text-accent">resend.com/api-keys</a>.</p>
+                                </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <FormInput label="Sender Name" name="senderName" value={joinContent.resendConfig?.senderName || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, senderName: e.target.value } as any })} />
-                                    <FormInput label="Sender Email" name="senderEmail" value={joinContent.resendConfig?.senderEmail || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, senderEmail: e.target.value } as any })} />
+                                    <FormInput label="Sender Name" name="senderName" value={joinContent.resendConfig?.senderName || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, senderName: e.target.value } as any })} placeholder="e.g. Dhaka College Cultural Club" />
+                                    <FormInput label="Sender Email" name="senderEmail" value={joinContent.resendConfig?.senderEmail || ''} onChange={(e) => updateJoinContent({ resendConfig: { ...joinContent.resendConfig, senderEmail: e.target.value } as any })} placeholder="e.g. onboarding@resend.dev" />
                                 </div>
                                 <div className="border-t border-border-color pt-6 mt-6">
                                     <h3 className="font-extrabold text-sm uppercase tracking-wider mb-4">Email Template</h3>
