@@ -210,72 +210,26 @@ const JoinAdminSettings: React.FC = () => {
             let responseData: any = null;
             let sendSuccess = false;
 
-            // 1. Try server proxy first
-            try {
-                const response = await fetch('/api/email/send', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload)
-                });
+            const response = await fetch('/api/email/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
 
-                const rawText = await response.text().catch(() => '');
-                try { responseData = JSON.parse(rawText); } catch {}
+            const rawText = await response.text().catch(() => '');
+            try { responseData = JSON.parse(rawText); } catch {}
 
-                if (response.ok && responseData && !responseData.error) {
-                    sendSuccess = true;
-                } else if (responseData && responseData.error) {
-                    throw new Error(responseData.error);
-                } else {
-                    throw new Error(`Server endpoint returned status ${response.status}`);
-                }
-            } catch (proxyError: any) {
-                console.warn("Server proxy test email failed, checking client fallback:", proxyError.message);
-
-                // 2. Direct client Resend API call fallback if API key is provided
-                const directKey = (apiKey || '').trim();
-                if (directKey) {
-                    console.log("Attempting direct client-side test email call to Resend...");
-                    const resendDirectRes = await fetch("https://api.resend.com/emails", {
-                        method: "POST",
-                        headers: {
-                            "Authorization": `Bearer ${directKey}`,
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            from: fromHeader,
-                            to: [testRecipient],
-                            subject: payload.subject,
-                            html: payload.html
-                        })
-                    });
-
-                    const directText = await resendDirectRes.text().catch(() => '');
-                    try { responseData = JSON.parse(directText); } catch {}
-
-                    if (resendDirectRes.ok) {
-                        sendSuccess = true;
-                    } else {
-                        let errMsg = responseData?.message || responseData?.error?.message || directText || "Direct Resend API call failed";
-                        if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
-                            errMsg = "Resend Sandbox Restriction: When using a sandbox key or onboarding@resend.dev, you must send test emails to your registered Resend account email address.";
-                        } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
-                            errMsg = `Resend Domain Error: The domain in sender address '${senderEmail}' is not verified in your Resend account. Verify the domain in Resend or use 'onboarding@resend.dev'.`;
-                        }
-                        throw new Error(errMsg);
-                    }
-                } else {
-                    throw proxyError;
-                }
-            }
-
-            if (sendSuccess) {
+            if (response.ok && responseData && !responseData.error) {
                 setTestResult({
                     success: true,
                     message: `Test email sent successfully! Message ID: ${responseData?.id || 'N/A'}`
                 });
                 showToast("Test email sent successfully!", "success");
+            } else {
+                const errMsg = responseData?.error || responseData?.message || (rawText ? rawText.substring(0, 150) : `Server returned status ${response.status}`);
+                throw new Error(errMsg);
             }
         } catch (error: any) {
             console.error("Test email sending failed:", error);

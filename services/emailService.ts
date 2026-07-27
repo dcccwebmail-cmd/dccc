@@ -197,47 +197,9 @@ export const sendResendEmail = async ({ resendConfig, to, subject, htmlContent, 
             throw new Error(responseData.error);
         }
 
-        throw new Error(`Server endpoint returned status ${response.status}`);
+        throw new Error(`Server returned status ${response.status}: ${rawText || 'Failed to send email'}`);
     } catch (proxyError: any) {
-        console.warn("Server proxy email route failed or threw error:", proxyError.message);
-
-        // 2. Direct client Resend API call fallback if API key is provided
-        const directKey = (resendConfig?.apiKey || '').trim();
-        if (directKey) {
-            console.log("Falling back to direct client-side Resend API call...");
-            const resendDirectRes = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${directKey}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    from: fromHeader,
-                    to: [to.email],
-                    subject: subject,
-                    html: `<html><body>${finalBody}</body></html>`,
-                    attachments: attachments
-                })
-            });
-
-            const directText = await resendDirectRes.text().catch(() => '');
-            let directJson: any = null;
-            try { directJson = JSON.parse(directText); } catch {}
-
-            if (resendDirectRes.ok) {
-                return directJson || { success: true };
-            }
-
-            let errMsg = directJson?.message || directJson?.error?.message || directText || "Direct Resend API call failed";
-            if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
-                errMsg = "Resend Sandbox Restriction: When using a sandbox key or onboarding@resend.dev, you can only send emails to your verified account email address.";
-            } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
-                errMsg = `Resend Domain Error: The domain in sender address '${fromHeader}' is not verified in your Resend account. Verify the domain in Resend or use 'onboarding@resend.dev'.`;
-            }
-
-            throw new Error(errMsg);
-        }
-
+        console.error("Email sending failed:", proxyError.message);
         throw proxyError;
     }
 };
