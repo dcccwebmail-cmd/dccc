@@ -64,9 +64,20 @@ const Footer: React.FC = () => {
             <span className="hidden md:inline">|</span>
             <p className="block md:inline">{footerData.address}</p>
         </div>
-        <div className="pt-8 mt-4 border-t border-border-color text-sm">
+        <div className="pt-8 mt-4 border-t border-border-color text-sm relative">
             <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-4">
-                <p>{dynamicCopyrightText}</p>
+                <p>
+                  {dynamicCopyrightText}
+                  <Link 
+                    to="/join-admin" 
+                    className="opacity-0 w-3 h-3 inline-block cursor-default select-none ml-1 align-middle" 
+                    aria-hidden="true" 
+                    tabIndex={-1}
+                    title=""
+                  >
+                    .
+                  </Link>
+                </p>
             </div>
         </div>
       </div>

@@ -1,7 +1,5 @@
-
 import { db } from './firebase';
-import { EmailConfig, ResendConfig, IdCardConfig, JoinRequest } from '../types';
-import { sendResendEmail } from './emailService';
+import { IdCardConfig, JoinRequest } from '../types';
 
 // Updated Script URL
 const GOOGLE_SHEET_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxrbMNLvHAR5sFgqXt00qcJy2HxKm0H4JRKIMdzdMyF8naOzpWfgZz986ocMXB5wQkShA/exec"; 
@@ -12,8 +10,6 @@ const METADATA_DOC = 'globals/metadata'; // Store counters here
 export const submitJoinRequest = async (
   data: Omit<JoinRequest, 'id' | 'status' | 'submitted_at'> & { status?: 'pending' | 'approved' },
   configs?: {
-    emailConfig?: EmailConfig;
-    resendConfig?: ResendConfig;
     idCardConfig?: IdCardConfig;
   }
 ) => {
@@ -34,37 +30,6 @@ export const submitJoinRequest = async (
   }
 
   const docRef = await db.collection(COLLECTION).add(payload);
-
-  // Send Email via Resend if Approved immediately (e.g. offline form auto-approval)
-  if (status === 'approved' && configs?.resendConfig) {
-      try {
-          const emailResponse = await sendResendEmail({
-              resendConfig: configs.resendConfig,
-              to: { name: data.personal.name_en, email: data.personal.email },
-              subject: configs.emailConfig?.subject || "Welcome to DCCC",
-              htmlContent: configs.emailConfig?.body || "Your membership is approved.",
-              userData: { id: docRef.id, ...data, status, submitted_at: payload.submitted_at, assignedId } as any,
-              idCardConfig: configs.idCardConfig
-          });
-          console.log("Auto-approved offline form Resend email sent successfully, ID:", emailResponse?.id);
-          
-          if (emailResponse?.id) {
-              await db.collection(COLLECTION).doc(docRef.id).update({
-                  emailId: emailResponse.id,
-                  emailStatus: 'sent'
-              });
-          }
-      } catch (emailError) {
-          console.error("Failed to send Resend email for auto-approved offline form:", emailError);
-          try {
-              await db.collection(COLLECTION).doc(docRef.id).update({
-                  emailStatus: 'failed'
-              });
-          } catch (dbErr) {
-              console.error("Failed to update email status on failure:", dbErr);
-          }
-      }
-  }
 
   // 2. Send to Google Sheets (Secondary/Backup)
   if (GOOGLE_SHEET_SCRIPT_URL) {
@@ -134,8 +99,6 @@ interface UpdateStatusOptions {
     id: string;
     status: 'pending' | 'approved' | 'rejected';
     userData?: JoinRequest;
-    emailConfig?: EmailConfig;
-    resendConfig?: ResendConfig;
     idCardConfig?: IdCardConfig;
     sessionYear?: string; // Configured year from admin
 }
@@ -144,9 +107,6 @@ export const updateJoinRequestStatus = async ({
     id, 
     status,
     userData,
-    emailConfig,
-    resendConfig,
-    idCardConfig,
     sessionYear
 }: UpdateStatusOptions) => {
   if (!db) return;
@@ -155,11 +115,9 @@ export const updateJoinRequestStatus = async ({
 
   // 1. Logic for Approval & ID Generation
   if (status === 'approved' && userData && !assignedId) {
-      // Robust check using optional chaining
       const regType = userData.meta?.reg_type;
       
       if (regType === 'offline') {
-          // Use the ID from the form (safely accessing payment.dccc_id)
           const formId = userData.payment?.dccc_id;
           if (formId) {
               assignedId = formId;
@@ -168,7 +126,6 @@ export const updateJoinRequestStatus = async ({
               throw new Error("Cannot approve: Missing Offline Form ID in payment data.");
           }
       } else {
-          // Generate new Online ID using the configured session year
           try {
               assignedId = await generateNextOnlineId(sessionYear);
           } catch (e) {
@@ -180,55 +137,20 @@ export const updateJoinRequestStatus = async ({
 
   // 2. Update Firestore
   const updatePayload: any = { status };
-  // Only add assignedId to update if it has a valid value
   if (assignedId) {
       updatePayload.assignedId = assignedId;
   }
 
   await db.collection(COLLECTION).doc(id).update(updatePayload);
 
-  // 3. Send Email via Resend if Approved
-  if (status === 'approved' && userData) {
-      try {
-          const emailResponse = await sendResendEmail({
-              resendConfig,
-              to: { name: userData.personal.name_en, email: userData.personal.email },
-              subject: emailConfig?.subject || "Welcome to DCCC",
-              htmlContent: emailConfig?.body || "Your membership is approved.",
-              userData: { ...userData, assignedId }, // Pass the newly assigned ID
-              idCardConfig
-          });
-          console.log("Resend email sent successfully, ID:", emailResponse?.id);
-          
-          if (emailResponse?.id) {
-              await db.collection(COLLECTION).doc(id).update({
-                  emailId: emailResponse.id,
-                  emailStatus: 'sent'
-              });
-          }
-      } catch (emailError) {
-          console.error("Failed to send Resend email:", emailError);
-          try {
-              await db.collection(COLLECTION).doc(id).update({
-                  emailStatus: 'failed'
-              });
-          } catch (dbErr) {
-              console.error("Failed to update email status to failed in database:", dbErr);
-          }
-          // Don't throw here to avoid rolling back the approval state in UI logic, but log it loudly.
-          // In a production backend, this would be a separate queue.
-          alert(`Status updated to Approved, but Email failed to send: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`);
-      }
-  }
-
-  // 4. Update Google Sheet (Legacy / Backup Record)
+  // 3. Update Google Sheet (Legacy / Backup Record)
   if (GOOGLE_SHEET_SCRIPT_URL) {
       try {
           const sheetPayload = {
               action: 'update_status',
               id: id,
               status: status,
-              assignedId: assignedId // Pass the ID generated here to the sheet
+              assignedId: assignedId
           };
           
           await fetch(GOOGLE_SHEET_SCRIPT_URL, {

@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import ImageKit from 'imagekit';
-import { Resend } from 'resend';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -174,129 +173,6 @@ apiApp.delete('/imagekit/files/:fileId', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
-  }
-});
-
-// Secure Proxy for Resend Email Sending
-apiApp.post('/email/send', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const { to, subject, html, attachments, resendApiKey } = body;
-    
-    const apiKey = (process.env.RESEND_API_KEY || resendApiKey || '').trim();
-    if (!apiKey) {
-      return res.status(400).json({ error: "Resend API Key is missing. Please configure RESEND_API_KEY on the server or in Email System settings." });
-    }
-
-    const fromHeader = body.from;
-    if (!fromHeader) {
-      return res.status(400).json({ error: "Sender email is missing. Please configure Sender Email in settings." });
-    }
-
-    const resendClient = new Resend(apiKey);
-    const formattedAttachments = attachments?.map((att: any) => ({
-      filename: att.filename,
-      content: Buffer.from(att.content, 'base64')
-    }));
-
-    const sendPayload: any = {
-      from: fromHeader,
-      to: Array.isArray(to) ? to : [to],
-      subject,
-      html,
-    };
-
-    if (formattedAttachments && formattedAttachments.length > 0) {
-      sendPayload.attachments = formattedAttachments;
-    }
-
-    console.log(`Sending secure email via Resend to ${JSON.stringify(to)} with subject "${subject}"...`);
-
-    const { data, error } = await resendClient.emails.send(sendPayload);
-
-    if (error) {
-      console.error(`Resend SDK error:`, error);
-      let errMsg = typeof error === 'string' ? error : ((error as any).message || (error as any).name || JSON.stringify(error));
-      
-      if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
-        errMsg = "Resend Sandbox Mode Restriction: You can only send test emails to your registered Resend account email address when using sandbox key / onboarding@resend.dev.";
-      } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
-        errMsg = `Resend Domain Error: The domain in sender address '${fromHeader}' is not verified in your Resend account. Verify domain in Resend or use 'onboarding@resend.dev' for testing.`;
-      }
-
-      return res.status(400).json({ error: errMsg });
-    }
-
-    res.json(data || { success: true });
-  } catch (error: any) {
-    console.error("Error in secure /email/send proxy:", error);
-    let errMsg = error.message || "An error occurred while processing email request.";
-    if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
-      errMsg = "Resend Sandbox Mode Restriction: You can only send test emails to your registered Resend account email address when using sandbox key / onboarding@resend.dev.";
-    } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
-      errMsg = "Resend Domain Error: The domain in sender address is not verified in your Resend account. Verify domain in Resend or use 'onboarding@resend.dev' for testing.";
-    }
-    res.status(400).json({ error: errMsg });
-  }
-});
-
-// Resend Webhook endpoint for tracking email status
-apiApp.post('/webhooks/resend', async (req, res, next) => {
-  try {
-    const event = req.body;
-    console.log("Received Resend Webhook:", JSON.stringify(event));
-
-    // Resend sends webhook details containing 'type' and 'data'
-    const eventType = event?.type;
-    const emailId = event?.data?.email_id;
-
-    if (!eventType || !emailId) {
-      return res.status(400).json({ error: "Invalid Resend webhook payload structure." });
-    }
-
-    if (!adminDb) {
-      return res.status(500).json({ error: "Firestore Admin Database is not initialized." });
-    }
-
-    // Map Resend events to our JoinRequest emailStatus types
-    const mapResendStatus = (type: string): 'sending' | 'sent' | 'delivered' | 'bounced' | 'opened' | 'failed' | null => {
-      switch (type) {
-        case 'email.sent': return 'sent';
-        case 'email.delivered': return 'delivered';
-        case 'email.bounced': return 'bounced';
-        case 'email.opened': return 'opened';
-        case 'email.clicked': return 'opened';
-        case 'email.complained': return 'failed';
-        case 'email.delivery_delayed': return 'sending';
-        default: return null;
-      }
-    };
-
-    const targetStatus = mapResendStatus(eventType);
-    if (!targetStatus) {
-      console.log(`Ignoring Resend event type: ${eventType}`);
-      return res.json({ received: true, ignored: true });
-    }
-
-    // Query join_requests collection in Firestore to find request with matching emailId
-    const snapshot = await adminDb.collection('join_requests').where('emailId', '==', emailId).get();
-    
-    if (snapshot.empty) {
-      console.warn(`No JoinRequest document found matching emailId: ${emailId}`);
-      return res.json({ success: false, reason: "No matching document found in Firestore." });
-    }
-
-    const batch = adminDb.batch();
-    snapshot.docs.forEach((doc: any) => {
-      console.log(`Updating document ${doc.id} with email status: ${targetStatus}`);
-      batch.update(doc.ref, { emailStatus: targetStatus });
-    });
-    await batch.commit();
-
-    res.json({ success: true, updatedCount: snapshot.size });
-  } catch (error: any) {
-    console.error("Error in /webhooks/resend listener:", error);
-    res.status(500).json({ error: error.message });
   }
 });
 

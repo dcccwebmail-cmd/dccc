@@ -330,8 +330,6 @@ const JoinPage: React.FC = () => {
             }
 
             const reqId = await submitJoinRequest(servicePayload, {
-                emailConfig: data?.join?.emailConfig,
-                resendConfig: data?.join?.resendConfig,
                 idCardConfig: data?.join?.idCardConfig,
             });
 
