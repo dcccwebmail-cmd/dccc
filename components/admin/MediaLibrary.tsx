@@ -115,8 +115,14 @@ export const MediaBrowser: React.FC<MediaBrowserProps> = ({ onSelect, pickerMode
             });
 
             if (!res.ok) {
-                const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.error || errorData.message || 'Image upload failed.');
+                const text = await res.text().catch(() => '');
+                let errorData: any = {};
+                try { errorData = JSON.parse(text); } catch {}
+                let errMsg = errorData.error || errorData.message || (text ? text.substring(0, 150) : 'Image upload failed.');
+                if (errMsg.includes('environment variables') || errMsg.includes('credentials') || errMsg.includes('missing')) {
+                    errMsg = 'ImageKit Setup Missing: Please configure VITE_IMAGEKIT_URL_ENDPOINT, VITE_IMAGEKIT_PUBLIC_KEY, and IMAGEKIT_PRIVATE_KEY in Vercel Environment Variables.';
+                }
+                throw new Error(errMsg);
             }
 
             const json = await res.json();

@@ -179,64 +179,117 @@ const JoinAdminSettings: React.FC = () => {
             const fromHeader = senderName ? `${senderName} <${senderEmail}>` : senderEmail;
             
             console.log("Sending test email to:", testRecipient, "from:", fromHeader);
-            const response = await fetch('/api/email/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    to: testRecipient,
-                    from: fromHeader,
-                    subject: "DCCC Resend Email System Test Connection",
-                    html: `
-                        <div style="font-family: sans-serif; padding: 24px; color: #1e293b; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
-                            <div style="text-align: center; margin-bottom: 20px;">
-                                <img src="https://ik.imagekit.io/dccc/dccc-logo.png" alt="DCCC Logo" style="height: 60px; width: auto;" />
-                            </div>
-                            <h2 style="color: #3b82f6; margin-top: 0; text-align: center; font-size: 22px; font-weight: 800;">Connection Successful! 🎉</h2>
-                            <p style="font-size: 15px; line-height: 1.6; color: #475569;">Hello,</p>
-                            <p style="font-size: 15px; line-height: 1.6; color: #475569;">This is a successful automated test email from your <strong>Dhaka College Cultural Club (DCCC)</strong> Admin Panel.</p>
-                            <p style="font-size: 15px; line-height: 1.6; color: #475569;">If you are reading this message, it means your Resend API integration, sender address setup, and backend routing are <strong>working perfectly!</strong></p>
-                            
-                            <div style="background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1;">
-                                <strong>Configuration Details:</strong><br/>
-                                • Sender Address: ${fromHeader}<br/>
-                                • Recipient: ${testRecipient}<br/>
-                                • API Key Source: ${apiKey ? "Manually Entered / Form State" : "Vercel Environment Variable (Server)"}
-                            </div>
-                            
-                            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-                            <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 0;">Dhaka College Cultural Club • Membership Control Center</p>
+            const payload = {
+                to: testRecipient,
+                from: fromHeader,
+                subject: "DCCC Resend Email System Test Connection",
+                html: `
+                    <div style="font-family: sans-serif; padding: 24px; color: #1e293b; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <img src="https://ik.imagekit.io/dccc/dccc-logo.png" alt="DCCC Logo" style="height: 60px; width: auto;" />
                         </div>
-                    `,
-                    resendApiKey: apiKey || undefined
-                })
-            });
+                        <h2 style="color: #3b82f6; margin-top: 0; text-align: center; font-size: 22px; font-weight: 800;">Connection Successful! 🎉</h2>
+                        <p style="font-size: 15px; line-height: 1.6; color: #475569;">Hello,</p>
+                        <p style="font-size: 15px; line-height: 1.6; color: #475569;">This is a successful automated test email from your <strong>Dhaka College Cultural Club (DCCC)</strong> Admin Panel.</p>
+                        <p style="font-size: 15px; line-height: 1.6; color: #475569;">If you are reading this message, it means your Resend API integration, sender address setup, and email routing are <strong>working perfectly!</strong></p>
+                        
+                        <div style="background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin: 20px 0; font-family: monospace; font-size: 13px; color: #334155; border: 1px solid #cbd5e1;">
+                            <strong>Configuration Details:</strong><br/>
+                            • Sender Address: ${fromHeader}<br/>
+                            • Recipient: ${testRecipient}<br/>
+                            • API Key Source: ${apiKey ? "Manually Entered / Form State" : "Vercel Environment Variable (Server)"}
+                        </div>
+                        
+                        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 0;">Dhaka College Cultural Club • Membership Control Center</p>
+                    </div>
+                `,
+                resendApiKey: apiKey || undefined
+            };
 
-            let responseData: any = {};
+            let responseData: any = null;
+            let sendSuccess = false;
+
+            // 1. Try server proxy first
             try {
-                responseData = await response.json();
-            } catch (err) {
-                const text = await response.text().catch(() => '');
-                throw new Error(`Server returned error status (${response.status} ${response.statusText}): ${text || 'Non-JSON response'}`);
+                const response = await fetch('/api/email/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const rawText = await response.text().catch(() => '');
+                try { responseData = JSON.parse(rawText); } catch {}
+
+                if (response.ok && responseData && !responseData.error) {
+                    sendSuccess = true;
+                } else if (responseData && responseData.error) {
+                    throw new Error(responseData.error);
+                } else {
+                    throw new Error(`Server endpoint returned status ${response.status}`);
+                }
+            } catch (proxyError: any) {
+                console.warn("Server proxy test email failed, checking client fallback:", proxyError.message);
+
+                // 2. Direct client Resend API call fallback if API key is provided
+                const directKey = (apiKey || '').trim();
+                if (directKey) {
+                    console.log("Attempting direct client-side test email call to Resend...");
+                    const resendDirectRes = await fetch("https://api.resend.com/emails", {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${directKey}`,
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            from: fromHeader,
+                            to: [testRecipient],
+                            subject: payload.subject,
+                            html: payload.html
+                        })
+                    });
+
+                    const directText = await resendDirectRes.text().catch(() => '');
+                    try { responseData = JSON.parse(directText); } catch {}
+
+                    if (resendDirectRes.ok) {
+                        sendSuccess = true;
+                    } else {
+                        let errMsg = responseData?.message || responseData?.error?.message || directText || "Direct Resend API call failed";
+                        if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
+                            errMsg = "Resend Sandbox Restriction: When using a sandbox key or onboarding@resend.dev, you must send test emails to your registered Resend account email address.";
+                        } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
+                            errMsg = `Resend Domain Error: The domain in sender address '${senderEmail}' is not verified in your Resend account. Verify the domain in Resend or use 'onboarding@resend.dev'.`;
+                        }
+                        throw new Error(errMsg);
+                    }
+                } else {
+                    throw proxyError;
+                }
             }
 
-            if (response.ok) {
+            if (sendSuccess) {
                 setTestResult({
                     success: true,
-                    message: `Test email sent successfully! Message ID: ${responseData.id || 'N/A'}`
+                    message: `Test email sent successfully! Message ID: ${responseData?.id || 'N/A'}`
                 });
-                showToast("Test email sent!", "success");
-            } else {
-                throw new Error(responseData.error || responseData.message || "Failed to send email via API.");
+                showToast("Test email sent successfully!", "success");
             }
         } catch (error: any) {
             console.error("Test email sending failed:", error);
+            let userMsg = error.message || "Unknown error occurred while sending test email.";
+            if (userMsg.includes('testing email address') || userMsg.includes('sandbox')) {
+                userMsg = "Resend Sandbox Mode: When using a sandbox key or onboarding@resend.dev, you must send to your registered Resend account email address.";
+            } else if (userMsg.includes('not verified') || userMsg.includes('domain')) {
+                userMsg = `Resend Domain Error: The domain in sender address '${senderEmail}' is not verified in your Resend account. Verify domain in Resend or use 'onboarding@resend.dev' for testing.`;
+            }
             setTestResult({
                 success: false,
-                message: error.message || "Unknown error occurred."
+                message: userMsg
             });
-            showToast("Test email failed.", "error");
+            showToast(userMsg, "error");
         } finally {
             setIsSendingTest(false);
         }

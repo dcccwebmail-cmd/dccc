@@ -267,8 +267,14 @@ const JoinPage: React.FC = () => {
                 });
 
                 if (!res.ok) {
-                    const errorData = await res.json().catch(() => ({}));
-                    throw new Error(errorData.error || errorData.message || 'Image upload failed.');
+                    const text = await res.text().catch(() => '');
+                    let errorData: any = {};
+                    try { errorData = JSON.parse(text); } catch {}
+                    let errMsg = errorData.error || errorData.message || (text ? text.substring(0, 150) : 'Photo upload failed.');
+                    if (errMsg.includes('environment variables') || errMsg.includes('credentials') || errMsg.includes('missing')) {
+                        errMsg = 'Photo upload setup incomplete: Please ensure ImageKit API keys are configured in Vercel environment variables.';
+                    }
+                    throw new Error(errMsg);
                 }
                 const json = await res.json();
                 imageUrl = json.url;

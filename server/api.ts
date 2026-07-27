@@ -51,24 +51,25 @@ apiApp.get('/imagekit/config', (req, res) => {
 });
 
 // API Route to fetch auth parameters for client-side upload
-apiApp.get('/imagekit/auth', (req, res, next) => {
+apiApp.get('/imagekit/auth', (req, res) => {
   try {
     const ik = getIkClient();
     const authenticationParameters = ik.getAuthenticationParameters();
-    // Return publicKey along with signature, expire, token
     res.json({
         ...authenticationParameters,
         publicKey: (process.env.VITE_IMAGEKIT_PUBLIC_KEY || process.env.IMAGEKIT_PUBLIC_KEY || '').trim()
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    console.error("ImageKit Auth Error:", error.message);
+    res.status(400).json({ error: error.message || "ImageKit configuration is missing or invalid on the server." });
   }
 });
 
 // Secure API Route to handle server-side ImageKit upload proxy
-apiApp.post('/imagekit/upload', async (req, res, next) => {
+apiApp.post('/imagekit/upload', async (req, res) => {
   try {
-    const { file, fileName, folder, useUniqueFileName, imagekitConfig } = req.body;
+    const body = req.body || {};
+    const { file, fileName, folder, useUniqueFileName, imagekitConfig } = body;
     const ik = getIkClient(imagekitConfig);
     
     if (!file || !fileName) {
@@ -86,12 +87,12 @@ apiApp.post('/imagekit/upload', async (req, res, next) => {
     res.json(result);
   } catch (error: any) {
     console.error("ImageKit server-side upload error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message || "ImageKit upload failed on the server." });
   }
 });
 
 // API Route to list media files
-apiApp.get('/imagekit/files', async (req, res, next) => {
+apiApp.get('/imagekit/files', async (req, res) => {
   try {
     const ik = getIkClient();
     const pathParam = req.query.path as string | undefined;
@@ -103,12 +104,12 @@ apiApp.get('/imagekit/files', async (req, res, next) => {
     // Return only actual files
     res.json(result.filter((f: any) => f.type !== 'folder'));
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
 // API Route to list all unique folders (virtual + actual)
-apiApp.get('/imagekit/folders', async (req, res, next) => {
+apiApp.get('/imagekit/folders', async (req, res) => {
   try {
     const ik = getIkClient();
     const result = await ik.listFiles({ skip: 0, limit: 1000 });
@@ -136,60 +137,60 @@ apiApp.get('/imagekit/folders', async (req, res, next) => {
     });
     res.json(Array.from(folders).sort());
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
 // API Route to create folder
-apiApp.post('/imagekit/folder', async (req, res, next) => {
+apiApp.post('/imagekit/folder', async (req, res) => {
   try {
      const ik = getIkClient();
-     const { folderName, parentFolderPath } = req.body;
-     // imagekit node SDK createFolder support natively
+     const { folderName, parentFolderPath } = req.body || {};
      await ik.createFolder({ folderName, parentFolderPath });
      res.json({ success: true });
   } catch (error: any) {
-     res.status(500).json({ error: error.message });
+     res.status(400).json({ error: error.message });
   }
 });
 
 // API Route to rename a media file (Note: imagekit SDK syntax)
-apiApp.put('/imagekit/files/:fileId/rename', async (req, res, next) => {
+apiApp.put('/imagekit/files/:fileId/rename', async (req, res) => {
   try {
     const ik = getIkClient();
-    const { filePath, newFileName } = req.body;
+    const { filePath, newFileName } = req.body || {};
     await ik.renameFile({ filePath, newFileName, purgeCache: true });
     res.json({ success: true });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
 // API Route to delete a media file
-apiApp.delete('/imagekit/files/:fileId', async (req, res, next) => {
+apiApp.delete('/imagekit/files/:fileId', async (req, res) => {
   try {
     const ik = getIkClient();
     const { fileId } = req.params;
     await ik.deleteFile(fileId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 });
 
 // Secure Proxy for Resend Email Sending
-apiApp.post('/email/send', async (req, res, next) => {
+apiApp.post('/email/send', async (req, res) => {
   try {
-    const { to, subject, html, attachments, resendApiKey } = req.body;
+    const body = req.body || {};
+    const { to, subject, html, attachments, resendApiKey } = body;
     
     const apiKey = (process.env.RESEND_API_KEY || resendApiKey || '').trim();
     if (!apiKey) {
       return res.status(400).json({ error: "Resend API Key is missing. Please configure RESEND_API_KEY on the server or in Email System settings." });
     }
 
-    const fromHeader = req.body.from;
+    const fromHeader = body.from;
     if (!fromHeader) {
-      return res.status(400).json({ error: "Sender details are missing." });
+      return res.status(400).json({ error: "Sender email is missing. Please configure Sender Email in settings." });
     }
 
     const resendClient = new Resend(apiKey);
@@ -209,20 +210,33 @@ apiApp.post('/email/send', async (req, res, next) => {
       sendPayload.attachments = formattedAttachments;
     }
 
-    console.log(`Sending secure email via Resend to ${JSON.stringify(to)} with subject "${subject}" using SDK...`);
+    console.log(`Sending secure email via Resend to ${JSON.stringify(to)} with subject "${subject}"...`);
 
     const { data, error } = await resendClient.emails.send(sendPayload);
 
     if (error) {
       console.error(`Resend SDK error:`, error);
-      const errMsg = typeof error === 'string' ? error : ((error as any).message || (error as any).name || JSON.stringify(error));
+      let errMsg = typeof error === 'string' ? error : ((error as any).message || (error as any).name || JSON.stringify(error));
+      
+      if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
+        errMsg = "Resend Sandbox Mode Restriction: You can only send test emails to your registered Resend account email address when using sandbox key / onboarding@resend.dev.";
+      } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
+        errMsg = `Resend Domain Error: The domain in sender address '${fromHeader}' is not verified in your Resend account. Verify domain in Resend or use 'onboarding@resend.dev' for testing.`;
+      }
+
       return res.status(400).json({ error: errMsg });
     }
 
     res.json(data || { success: true });
   } catch (error: any) {
     console.error("Error in secure /email/send proxy:", error);
-    res.status(500).json({ error: error.message || "An error occurred while processing email request." });
+    let errMsg = error.message || "An error occurred while processing email request.";
+    if (errMsg.includes('testing email address') || errMsg.includes('sandbox')) {
+      errMsg = "Resend Sandbox Mode Restriction: You can only send test emails to your registered Resend account email address when using sandbox key / onboarding@resend.dev.";
+    } else if (errMsg.includes('not verified') || errMsg.includes('domain')) {
+      errMsg = "Resend Domain Error: The domain in sender address is not verified in your Resend account. Verify domain in Resend or use 'onboarding@resend.dev' for testing.";
+    }
+    res.status(400).json({ error: errMsg });
   }
 });
 
